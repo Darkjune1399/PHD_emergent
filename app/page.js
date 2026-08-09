@@ -240,6 +240,7 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
               <div><Label>Email</Label><Input type="email" value={af.email} onChange={e => setAf({ ...af, email: e.target.value })} placeholder="email@contoh.com" required /></div>
               <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="••••••••" required /></div>
               <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
+              {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
             </form>
           </CardContent>
         </Card>
