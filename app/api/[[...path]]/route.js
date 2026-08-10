@@ -288,6 +288,26 @@ function levelOf(cat) {
   if (['ambang', 'ringan', 'sedang'].includes(c)) return 'Ambang'
   return 'Abnormal'
 }
+function buildTrend(assessments, range) {
+  const now = new Date()
+  if (range === 'monthly') {
+    const buckets = {}
+    for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); buckets[d.toISOString().slice(0, 7)] = 0 }
+    assessments.forEach(a => { const key = new Date(a.createdAt).toISOString().slice(0, 7); if (key in buckets) buckets[key]++ })
+    return Object.entries(buckets).map(([k, count]) => ({ date: k, count }))
+  }
+  if (range === 'weekly') {
+    const weekStart = (d) => { const x = new Date(d); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); x.setHours(0, 0, 0, 0); return x }
+    const buckets = {}
+    for (let i = 7; i >= 0; i--) { const ws = weekStart(now); ws.setDate(ws.getDate() - i * 7); buckets[ws.toISOString().slice(0, 10)] = 0 }
+    assessments.forEach(a => { const key = weekStart(new Date(a.createdAt)).toISOString().slice(0, 10); if (key in buckets) buckets[key]++ })
+    return Object.entries(buckets).map(([k, count]) => ({ date: k.slice(5), count }))
+  }
+  const days = {}
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); days[d.toISOString().slice(0, 10)] = 0 }
+  assessments.forEach(a => { const key = new Date(a.createdAt).toISOString().slice(0, 10); if (key in days) days[key]++ })
+  return Object.entries(days).map(([date, count]) => ({ date: date.slice(5), count }))
+}
 
 // ================= ROUTER =================
 async function handleRoute(request, { params }) {
@@ -321,6 +341,25 @@ async function handleRoute(request, { params }) {
       const user = await getUserFromRequest(request, db)
       if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
       return handleCORS(NextResponse.json({ user }))
+    }
+
+    if (route === '/auth/forgot-password' && method === 'POST') {
+      const { email } = await request.json()
+      const u = await db.collection('users').findOne({ email: (email || '').toLowerCase() })
+      if (!u) return handleCORS(NextResponse.json({ error: 'Email tidak terdaftar' }, { status: 404 }))
+      const token = crypto.randomBytes(24).toString('hex')
+      await db.collection('password_resets').insertOne({ token, userId: u.id, email: u.email, expiresAt: Date.now() + 60 * 60 * 1000, createdAt: new Date() })
+      // NOTE: Pengiriman email di-MOCK untuk mode demo — token dikembalikan langsung.
+      return handleCORS(NextResponse.json({ ok: true, demo: true, token }))
+    }
+    if (route === '/auth/reset-password' && method === 'POST') {
+      const { token, newPassword } = await request.json()
+      if (!token || !newPassword || newPassword.length < 4) return handleCORS(NextResponse.json({ error: 'Token & password (min 4 karakter) wajib diisi' }, { status: 400 }))
+      const rec = await db.collection('password_resets').findOne({ token })
+      if (!rec || rec.expiresAt < Date.now()) return handleCORS(NextResponse.json({ error: 'Token tidak valid atau kedaluwarsa' }, { status: 400 }))
+      await db.collection('users').updateOne({ id: rec.userId }, { $set: { passwordHash: hashPassword(newPassword) } })
+      await db.collection('password_resets').deleteOne({ token })
+      return handleCORS(NextResponse.json({ ok: true }))
     }
 
     // ---------- MEMBERS ----------
@@ -418,15 +457,12 @@ async function handleRoute(request, { params }) {
       if (!isAdmin(user)) return handleCORS(NextResponse.json({ error: 'Akses ditolak (bukan admin)' }, { status: 403 }))
 
       if (route === '/admin/stats' && method === 'GET') {
+        const url = new URL(request.url); const range = url.searchParams.get('range') || 'daily'
         const assessments = await db.collection('assessments').find({}).toArray()
         const total = assessments.length
         const dist = { Normal: 0, Ambang: 0, Abnormal: 0 }
         assessments.forEach(a => { dist[levelOf(a.result?.overallCategory)]++ })
-        // trend last 14 days
-        const days = {}
-        for (let i = 13; i >= 0; i--) { const d = new Date(); d.setDate(d.getDate() - i); const key = d.toISOString().slice(0, 10); days[key] = 0 }
-        assessments.forEach(a => { const key = new Date(a.createdAt).toISOString().slice(0, 10); if (key in days) days[key]++ })
-        const trend = Object.entries(days).map(([date, count]) => ({ date: date.slice(5), count }))
+        const trend = buildTrend(assessments, range)
         const alerts = await db.collection('alerts').find({}).toArray()
         const alertStatus = { New: 0, 'Under Review': 0, Referred: 0, Resolved: 0 }
         alerts.forEach(a => { if (a.status in alertStatus) alertStatus[a.status]++ })

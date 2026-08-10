@@ -304,3 +304,42 @@ agent_communication:
     -message: "Admin panel frontend needs comprehensive testing. Test all 7 tabs: (1) Dashboard - verify 4 stat cards, 2 charts, status section. (2) Red Flag Alerts - verify table, test status dropdown, detail dialog, filters. (3) Master Kuesioner - select PHQ-9, edit name, save; select SDQ, verify questions. (4) Aturan Usia - verify 3 age rules, test save. (5) Manajemen User - test suspend/activate, reset password. (6) Rujukan - add and delete referral. (7) Audit Log - verify entries. Login: admin@siap.id / admin123. Note: first API request may take 10-30s (cold compile)."
     -agent: "testing"
     -message: "🎉 ADMIN PANEL FRONTEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested all 7 tabs with 30+ individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Dashboard: stat cards, charts, status section all rendering correctly. ✅ Red Flag Alerts: table, status changes, detail dialog, filters all working. ✅ Master Kuesioner: PHQ-9 and SDQ instrument editing working, save functionality confirmed. ✅ Aturan Usia: age rules table and save working. ✅ Manajemen User: suspend/activate and reset password working perfectly with correct status badge updates and toasts. ✅ Rujukan: add and delete referrals working correctly. ✅ Audit Log: entries visible reflecting all actions performed. NO ISSUES FOUND. No console errors detected. Admin panel UI is fully functional and production-ready. All Indonesian language labels correct, all toasts displaying properly, all CRUD operations working as expected."
+
+## ---- UPDATE 3: DASHBOARD RANGE + FORGOT PASSWORD ----
+backend_dashboard_range:
+  - task: "Dashboard trend range filter (GET /admin/stats?range=daily/weekly/monthly)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented buildTrend function with range parameter: daily (14 days), weekly (8 weeks), monthly (6 months). GET /admin/stats?range=daily/weekly/monthly returns trend array with correct lengths."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL DASHBOARD RANGE TESTS PASSED (100% SUCCESS). Tested 5 scenarios: (1) GET /admin/stats?range=daily -> trend length 14 with {date, count} items. (2) GET /admin/stats?range=weekly -> trend length 8. (3) GET /admin/stats?range=monthly -> trend length 6. (4) GET /admin/stats (no range) -> defaults to daily (length 14). (5) All other stat fields (total, distribution, alertStatus, newAlerts, totalUsers, totalMembers) still present. All trend arrays have correct structure with date and count fields. Feature working perfectly."
+
+backend_forgot_reset_password:
+  - task: "Forgot/Reset password flow (demo mode with MOCKED email)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented POST /auth/forgot-password (creates token in password_resets collection, returns {ok:true, demo:true, token}) and POST /auth/reset-password (validates token, updates password, deletes token for single-use). Email sending is MOCKED for demo - token returned directly in response."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL FORGOT/RESET PASSWORD TESTS PASSED (100% SUCCESS). Comprehensive testing with 9 scenarios: (1) Registered fresh user with email 'resettest1786348839@example.com' and password 'origpass1'. (2) POST /auth/forgot-password with existing email -> 200 {ok:true, demo:true, token:'5049b027b5e0240bae6f...'} - token is non-empty string. (3) POST /auth/forgot-password with non-existent email -> 404 correctly. (4) POST /auth/reset-password with invalid token 'invalidtoken123' -> 400 correctly. (5) POST /auth/reset-password with valid token but newPassword='x' (too short) -> 400 correctly. (6) POST /auth/reset-password with valid token and newPassword='newpass99' -> 200 {ok:true}. (7) Login with OLD password 'origpass1' -> 401 (no longer works). (8) Login with NEW password 'newpass99' -> 200 with token (password successfully changed). (9) POST /auth/reset-password with SAME token again -> 400 (token single-use verified - already consumed/deleted). All status codes correct, password reset flow working perfectly, token single-use enforced correctly."
+
+agent_communication:
+    -agent: "main"
+    -message: "Test: (1) GET /admin/stats?range=daily -> trend length 14; ?range=weekly -> length 8; ?range=monthly -> length 6 (admin token admin@siap.id/admin123). (2) Forgot/Reset (demo, email MOCKED): POST /api/auth/forgot-password {email} for an existing user -> {ok:true, demo:true, token}; unknown email -> 404. POST /api/auth/reset-password {token,newPassword} -> ok; then user logs in with new password (200) and old password fails (401). reset-password with bad/expired token -> 400; newPassword <4 chars -> 400."
+    -agent: "testing"
+    -message: "🎉 UPDATE 3 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 2 new features with 14 individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Dashboard Trend Range Filter: GET /admin/stats?range=daily (14 items), weekly (8 items), monthly (6 items), no range defaults to daily (14 items). All trend items have {date, count} structure. All other stat fields still present. ✅ Forgot/Reset Password Flow: forgot-password with existing email returns {ok:true, demo:true, token}, non-existent email returns 404. reset-password with invalid token returns 400, short password returns 400, valid token+password returns 200. Password change verified: old password fails (401), new password works (200). Token single-use enforced (400 on reuse). NO ISSUES FOUND. Both features working correctly with proper status codes, data validation, and business logic. Backend is production-ready."

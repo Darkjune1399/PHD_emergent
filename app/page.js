@@ -210,6 +210,22 @@ export default function App() {
 }
 
 function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
+  const [screen, setScreen] = useState('auth') // auth | forgot | reset
+  const [fEmail, setFEmail] = useState('')
+  const [demoToken, setDemoToken] = useState('')
+  const [rToken, setRToken] = useState('')
+  const [rPass, setRPass] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  async function sendForgot(e) {
+    e.preventDefault(); setBusy(true)
+    try { const d = await api('/auth/forgot-password', { method: 'POST', body: { email: fEmail } }); setDemoToken(d.token); setRToken(d.token); toast.success('Tautan reset dibuat') } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  async function doReset(e) {
+    e.preventDefault(); setBusy(true)
+    try { await api('/auth/reset-password', { method: 'POST', body: { token: rToken, newPassword: rPass } }); toast.success('Password berhasil direset. Silakan masuk.'); setScreen('auth'); setDemoToken(''); setRPass(''); setAuthMode('login') } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+
   return (
     <div className="min-h-screen flex bg-slate-50">
       <Toaster position="top-center" richColors />
@@ -225,19 +241,53 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
       </div>
       <div className="flex-1 flex items-center justify-center p-6">
         <Card className="w-full max-w-md">
-          <CardHeader><CardTitle className="text-2xl">{authMode === 'login' ? 'Masuk' : 'Buat Akun'}</CardTitle><CardDescription>Kelola asesmen kesehatan mental keluarga Anda</CardDescription></CardHeader>
-          <CardContent>
-            <Tabs value={authMode} onValueChange={setAuthMode} className="mb-4">
-              <TabsList className="grid grid-cols-2 w-full"><TabsTrigger value="login">Masuk</TabsTrigger><TabsTrigger value="register">Daftar</TabsTrigger></TabsList>
-            </Tabs>
-            <form onSubmit={handleAuth} className="space-y-4">
-              {authMode === 'register' && (<div><Label>Nama Lengkap</Label><Input value={af.name} onChange={e => setAf({ ...af, name: e.target.value })} placeholder="Nama Anda" required /></div>)}
-              <div><Label>Email</Label><Input type="email" value={af.email} onChange={e => setAf({ ...af, email: e.target.value })} placeholder="email@contoh.com" required /></div>
-              <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
-              <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
-              {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
-            </form>
-          </CardContent>
+          {screen === 'auth' && (<>
+            <CardHeader><CardTitle className="text-2xl">{authMode === 'login' ? 'Masuk' : 'Buat Akun'}</CardTitle><CardDescription>Kelola asesmen kesehatan mental keluarga Anda</CardDescription></CardHeader>
+            <CardContent>
+              <Tabs value={authMode} onValueChange={setAuthMode} className="mb-4">
+                <TabsList className="grid grid-cols-2 w-full"><TabsTrigger value="login">Masuk</TabsTrigger><TabsTrigger value="register">Daftar</TabsTrigger></TabsList>
+              </Tabs>
+              <form onSubmit={handleAuth} className="space-y-4">
+                {authMode === 'register' && (<div><Label>Nama Lengkap</Label><Input value={af.name} onChange={e => setAf({ ...af, name: e.target.value })} placeholder="Nama Anda" required /></div>)}
+                <div><Label>Email</Label><Input type="email" value={af.email} onChange={e => setAf({ ...af, email: e.target.value })} placeholder="email@contoh.com" required /></div>
+                <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
+                <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
+                {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
+              </form>
+              {authMode === 'login' && <button onClick={() => { setScreen('forgot'); setFEmail(af.email) }} className="mt-3 text-sm text-teal-600 hover:underline w-full text-center">Lupa password?</button>}
+            </CardContent>
+          </>)}
+
+          {screen === 'forgot' && (<>
+            <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><KeyRound className="h-6 w-6 text-teal-600" /> Lupa Password</CardTitle><CardDescription>Masukkan email akun Anda untuk mendapatkan tautan reset.</CardDescription></CardHeader>
+            <CardContent>
+              <form onSubmit={sendForgot} className="space-y-4">
+                <div><Label>Email</Label><Input type="email" value={fEmail} onChange={e => setFEmail(e.target.value)} placeholder="email@contoh.com" required /></div>
+                <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={busy}>{busy ? 'Memproses...' : 'Kirim Tautan Reset'}</Button>
+              </form>
+              {demoToken && (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <div className="font-semibold text-amber-800 flex items-center gap-1"><AlertTriangle className="h-4 w-4" /> Mode Demo (email disimulasikan)</div>
+                  <p className="text-amber-700 mt-1">Pada sistem nyata, tautan ini dikirim ke email. Untuk demo, gunakan kode berikut:</p>
+                  <code className="block mt-2 break-all bg-white border rounded px-2 py-1 text-xs">{demoToken}</code>
+                  <Button className="w-full mt-3 bg-amber-600 hover:bg-amber-700" onClick={() => setScreen('reset')}>Lanjut Reset Password</Button>
+                </div>
+              )}
+              <button onClick={() => setScreen('auth')} className="mt-3 text-sm text-slate-500 hover:underline w-full text-center">Kembali ke Masuk</button>
+            </CardContent>
+          </>)}
+
+          {screen === 'reset' && (<>
+            <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><KeyRound className="h-6 w-6 text-teal-600" /> Reset Password</CardTitle><CardDescription>Masukkan kode token dan password baru Anda.</CardDescription></CardHeader>
+            <CardContent>
+              <form onSubmit={doReset} className="space-y-4">
+                <div><Label>Kode Token</Label><Input value={rToken} onChange={e => setRToken(e.target.value)} required /></div>
+                <div><Label>Password Baru</Label><Input type="password" value={rPass} onChange={e => setRPass(e.target.value)} placeholder="Min. 4 karakter" required /></div>
+                <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={busy}>{busy ? 'Memproses...' : 'Simpan Password Baru'}</Button>
+              </form>
+              <button onClick={() => setScreen('auth')} className="mt-3 text-sm text-slate-500 hover:underline w-full text-center">Kembali ke Masuk</button>
+            </CardContent>
+          </>)}
         </Card>
       </div>
     </div>
@@ -550,12 +600,13 @@ function StatCard({ icon, label, value, cls }) {
 
 function AdminDashboard({ aapi }) {
   const [stats, setStats] = useState(null)
+  const [range, setRange] = useState('daily')
   useEffect(() => {
     let active = true
-    const load = () => aapi('/admin/stats').then(d => { if (active) setStats(d) }).catch(() => {})
+    const load = () => aapi(`/admin/stats?range=${range}`).then(d => { if (active) setStats(d) }).catch(() => {})
     load(); const t = setInterval(load, 15000)
     return () => { active = false; clearInterval(t) }
-  }, [])
+  }, [range])
   if (!stats) return <div className="text-slate-500">Memuat statistik...</div>
   const distData = [
     { name: 'Normal', value: stats.distribution.Normal, fill: '#10b981' },
@@ -571,7 +622,7 @@ function AdminDashboard({ aapi }) {
         <StatCard icon={<Heart className="h-6 w-6 text-cyan-600" />} label="Anggota Keluarga" value={stats.totalMembers} cls="bg-cyan-100" />
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
-        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5 text-teal-600" /> Tren Asesmen (14 Hari)</CardTitle></CardHeader>
+        <Card><CardHeader><div className="flex items-center justify-between gap-2"><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5 text-teal-600" /> Tren Asesmen</CardTitle><Select value={range} onValueChange={setRange}><SelectTrigger className="w-32 h-8 text-xs"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="daily">Harian (14 hari)</SelectItem><SelectItem value="weekly">Mingguan (8 mgg)</SelectItem><SelectItem value="monthly">Bulanan (6 bln)</SelectItem></SelectContent></Select></div></CardHeader>
           <CardContent><div style={{ width: '100%', height: 240 }}><ResponsiveContainer><LineChart data={stats.trend}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="date" fontSize={11} /><YAxis fontSize={11} allowDecimals={false} /><Tooltip /><Line type="monotone" dataKey="count" stroke="#0d9488" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></CardContent>
         </Card>
         <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Activity className="h-5 w-5 text-teal-600" /> Distribusi Kategori Hasil</CardTitle></CardHeader>
