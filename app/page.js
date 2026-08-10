@@ -6,20 +6,22 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Separator } from '@/components/ui/separator'
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction } from '@/components/ui/alert-dialog'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User } from 'lucide-react'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
+import { Textarea } from '@/components/ui/textarea'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw } from 'lucide-react'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
+const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
+function isAdminRole(role) { return ADMIN_ROLES.includes(role) }
 
 function api(path, { method = 'GET', body, token } = {}) {
   const headers = { 'Content-Type': 'application/json' }
@@ -45,10 +47,8 @@ function CatBadge({ cat }) {
     : 'bg-red-100 text-red-700 border-red-200'
   return <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{cat}</span>
 }
-
 function ageIcon(age) {
   if (age <= 10) return <Baby className="h-5 w-5" />
-  if (age <= 18) return <User className="h-5 w-5" />
   return <User className="h-5 w-5" />
 }
 
@@ -56,7 +56,7 @@ export default function App() {
   const [token, setToken] = useState(null)
   const [user, setUser] = useState(null)
   const [booted, setBooted] = useState(false)
-  const [view, setView] = useState('dashboard') // dashboard | select-instrument | assessment | result | history
+  const [view, setView] = useState('dashboard')
 
   const [members, setMembers] = useState([])
   const [activeMember, setActiveMember] = useState(null)
@@ -68,11 +68,9 @@ export default function App() {
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
-  // auth form
   const [authMode, setAuthMode] = useState('login')
   const [af, setAf] = useState({ name: '', email: '', password: '' })
 
-  // member dialog
   const [memberDialog, setMemberDialog] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
   const [mf, setMf] = useState({ fullName: '', gender: 'Laki-laki', dob: '', relationship: 'Anak' })
@@ -83,11 +81,9 @@ export default function App() {
     else setBooted(true)
   }, [])
 
-  useEffect(() => { if (token && user) loadMembers() }, [token, user])
+  useEffect(() => { if (token && user && !isAdminRole(user.role)) loadMembers() }, [token, user])
 
-  function loadMembers() {
-    api('/members', { token }).then(setMembers).catch(e => toast.error(e.message))
-  }
+  function loadMembers() { api('/members', { token }).then(setMembers).catch(e => toast.error(e.message)) }
 
   async function handleAuth(e) {
     e.preventDefault()
@@ -102,9 +98,7 @@ export default function App() {
     } catch (e) { toast.error(e.message) } finally { setLoading(false) }
   }
 
-  function logout() {
-    localStorage.removeItem('siap_token'); setToken(null); setUser(null); setView('dashboard'); setMembers([])
-  }
+  function logout() { localStorage.removeItem('siap_token'); setToken(null); setUser(null); setView('dashboard'); setMembers([]) }
 
   function openAddMember() { setEditingMember(null); setMf({ fullName: '', gender: 'Laki-laki', dob: '', relationship: 'Anak' }); setMemberDialog(true) }
   function openEditMember(m) { setEditingMember(m); setMf({ fullName: m.fullName, gender: m.gender, dob: m.dob, relationship: m.relationship }); setMemberDialog(true) }
@@ -176,10 +170,11 @@ export default function App() {
     w.document.close()
   }
 
-  // ==================== RENDER ====================
   if (!booted) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Brain className="h-8 w-8 text-teal-600 animate-pulse" /></div>
 
   if (!token || !user) return <AuthScreen {...{ authMode, setAuthMode, af, setAf, handleAuth, loading }} />
+
+  if (isAdminRole(user.role)) return <AdminPanel user={user} token={token} logout={logout} />
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -238,7 +233,7 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
             <form onSubmit={handleAuth} className="space-y-4">
               {authMode === 'register' && (<div><Label>Nama Lengkap</Label><Input value={af.name} onChange={e => setAf({ ...af, name: e.target.value })} placeholder="Nama Anda" required /></div>)}
               <div><Label>Email</Label><Input type="email" value={af.email} onChange={e => setAf({ ...af, email: e.target.value })} placeholder="email@contoh.com" required /></div>
-              <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="••••••••" required /></div>
+              <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
               <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
               {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
             </form>
@@ -412,7 +407,7 @@ function ScoreRow({ label, value, badge }) {
 }
 
 function HistoryView({ activeMember, history, setView, viewResult, startAssessment }) {
-  const chartData = useMemo(() => [...history].reverse().map(h => ({ date: new Date(h.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }), skor: h.result.trendScore, label: h.result.trendLabel })), [history])
+  const chartData = useMemo(() => [...history].reverse().map(h => ({ date: new Date(h.createdAt).toLocaleDateString('id-ID', { day: '2-digit', month: 'short' }), skor: h.result.trendScore })), [history])
   return (
     <div className="max-w-4xl mx-auto">
       <Button variant="ghost" size="sm" onClick={() => setView('dashboard')} className="mb-4"><ArrowLeft className="h-4 w-4 mr-1" /> Dashboard</Button>
@@ -498,5 +493,275 @@ function EmergencyDialog({ emergencyOpen, setEmergencyOpen, referrals }) {
         <AlertDialogFooter><AlertDialogAction className="w-full bg-red-600 hover:bg-red-700">Saya Mengerti</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+  )
+}
+
+// ==================== ADMIN PANEL ====================
+const ROLE_LABEL = { super_admin: 'Super Admin', admin_medis: 'Admin Medis / Psikolog', admin_teknis: 'Admin Teknis' }
+const SEV_CLS = { Kritis: 'bg-red-600 text-white', Tinggi: 'bg-red-100 text-red-700 border-red-200', Sedang: 'bg-amber-100 text-amber-700 border-amber-200' }
+const STATUS_CLS = { New: 'bg-red-100 text-red-700', 'Under Review': 'bg-amber-100 text-amber-700', Referred: 'bg-blue-100 text-blue-700', Resolved: 'bg-emerald-100 text-emerald-700' }
+const SUB_NAMES_CLIENT = { E: 'Emosional (E)', C: 'Perilaku (C)', H: 'Hiperaktivitas (H)', P: 'Teman Sebaya (P)' }
+
+function AdminPanel({ user, token, logout }) {
+  const [tab, setTab] = useState('dashboard')
+  const aapi = (path, opts = {}) => api(path, { ...opts, token })
+  return (
+    <div className="min-h-screen bg-slate-50">
+      <Toaster position="top-center" richColors />
+      <header className="bg-slate-900 text-white shadow-md">
+        <div className="container flex items-center justify-between py-4">
+          <div className="flex items-center gap-2">
+            <div className="bg-teal-500/20 rounded-lg p-2"><ShieldCheck className="h-6 w-6 text-teal-400" /></div>
+            <div><div className="font-bold text-lg leading-none">SIAP Admin</div><div className="text-xs text-slate-300">Panel Administrasi Sistem</div></div>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="text-right hidden sm:block"><div className="text-sm font-medium">{user.name}</div><Badge className="bg-teal-500/20 text-teal-300 border-0 text-[10px]">{ROLE_LABEL[user.role] || user.role}</Badge></div>
+            <Button variant="secondary" size="sm" onClick={logout}><LogOut className="h-4 w-4 mr-1" /> Keluar</Button>
+          </div>
+        </div>
+      </header>
+      <div className="container py-6">
+        <Tabs value={tab} onValueChange={setTab}>
+          <TabsList className="mb-6 flex-wrap h-auto">
+            <TabsTrigger value="dashboard"><LayoutDashboard className="h-4 w-4 mr-1" /> Dashboard</TabsTrigger>
+            <TabsTrigger value="alerts"><Bell className="h-4 w-4 mr-1" /> Red Flag Alerts</TabsTrigger>
+            <TabsTrigger value="kuesioner"><ListChecks className="h-4 w-4 mr-1" /> Master Kuesioner</TabsTrigger>
+            <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>
+            <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>
+          </TabsList>
+          <TabsContent value="dashboard"><AdminDashboard aapi={aapi} /></TabsContent>
+          <TabsContent value="alerts"><AdminAlerts aapi={aapi} /></TabsContent>
+          <TabsContent value="kuesioner"><AdminInstruments aapi={aapi} /></TabsContent>
+          <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>
+          <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
+
+function StatCard({ icon, label, value, cls }) {
+  return <Card><CardContent className="py-5 flex items-center gap-4"><div className={`rounded-lg p-3 ${cls}`}>{icon}</div><div><div className="text-2xl font-bold text-slate-800">{value}</div><div className="text-sm text-slate-500">{label}</div></div></CardContent></Card>
+}
+
+function AdminDashboard({ aapi }) {
+  const [stats, setStats] = useState(null)
+  useEffect(() => {
+    let active = true
+    const load = () => aapi('/admin/stats').then(d => { if (active) setStats(d) }).catch(() => {})
+    load(); const t = setInterval(load, 15000)
+    return () => { active = false; clearInterval(t) }
+  }, [])
+  if (!stats) return <div className="text-slate-500">Memuat statistik...</div>
+  const distData = [
+    { name: 'Normal', value: stats.distribution.Normal, fill: '#10b981' },
+    { name: 'Ambang', value: stats.distribution.Ambang, fill: '#f59e0b' },
+    { name: 'Abnormal', value: stats.distribution.Abnormal, fill: '#ef4444' },
+  ]
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard icon={<ClipboardList className="h-6 w-6 text-teal-600" />} label="Total Asesmen" value={stats.total} cls="bg-teal-100" />
+        <StatCard icon={<ShieldAlert className="h-6 w-6 text-red-600" />} label="Alert Baru (belum ditangani)" value={stats.newAlerts} cls="bg-red-100" />
+        <StatCard icon={<Users className="h-6 w-6 text-blue-600" />} label="User Terdaftar" value={stats.totalUsers} cls="bg-blue-100" />
+        <StatCard icon={<Heart className="h-6 w-6 text-cyan-600" />} label="Anggota Keluarga" value={stats.totalMembers} cls="bg-cyan-100" />
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><TrendingUp className="h-5 w-5 text-teal-600" /> Tren Asesmen (14 Hari)</CardTitle></CardHeader>
+          <CardContent><div style={{ width: '100%', height: 240 }}><ResponsiveContainer><LineChart data={stats.trend}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="date" fontSize={11} /><YAxis fontSize={11} allowDecimals={false} /><Tooltip /><Line type="monotone" dataKey="count" stroke="#0d9488" strokeWidth={2} dot={{ r: 3 }} /></LineChart></ResponsiveContainer></div></CardContent>
+        </Card>
+        <Card><CardHeader><CardTitle className="text-base flex items-center gap-2"><Activity className="h-5 w-5 text-teal-600" /> Distribusi Kategori Hasil</CardTitle></CardHeader>
+          <CardContent><div style={{ width: '100%', height: 240 }}><ResponsiveContainer><BarChart data={distData}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} allowDecimals={false} /><Tooltip /><Bar dataKey="value" radius={[6, 6, 0, 0]}>{distData.map((e, i) => <Cell key={i} fill={e.fill} />)}</Bar></BarChart></ResponsiveContainer></div></CardContent>
+        </Card>
+      </div>
+      <Card><CardHeader><CardTitle className="text-base">Status Penanganan Alert</CardTitle></CardHeader>
+        <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          {Object.entries(stats.alertStatus).map(([k, v]) => (<div key={k} className={`rounded-lg p-3 text-center ${STATUS_CLS[k]}`}><div className="text-2xl font-bold">{v}</div><div className="text-xs">{k}</div></div>))}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function AdminAlerts({ aapi }) {
+  const [alerts, setAlerts] = useState([])
+  const [filter, setFilter] = useState('all')
+  const [detail, setDetail] = useState(null)
+  const load = () => aapi(`/admin/alerts?status=${filter}`).then(setAlerts).catch(e => toast.error(e.message))
+  useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t) }, [filter])
+  async function changeStatus(id, status) {
+    try { await aapi(`/admin/alerts/${id}`, { method: 'PATCH', body: { status } }); toast.success('Status diperbarui'); load() } catch (e) { toast.error(e.message) }
+  }
+  async function openDetail(id) { try { const d = await aapi(`/admin/alerts/${id}`); setDetail(d) } catch (e) { toast.error(e.message) } }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <div><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-red-600" /> Red Flag Alert System</h3><p className="text-sm text-slate-500">Diperbarui otomatis tiap 15 detik.</p></div>
+        <div className="flex items-center gap-2">
+          <Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent>{['all', 'New', 'Under Review', 'Referred', 'Resolved'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'Semua Status' : s}</SelectItem>)}</SelectContent></Select>
+          <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
+        </div>
+      </div>
+      <Card><CardContent className="p-0">
+        <Table>
+          <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Pasien</TableHead><TableHead>Instrumen</TableHead><TableHead>Tipe Risiko</TableHead><TableHead className="text-center">Severity</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableBody>
+            {alerts.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">Tidak ada alert.</TableCell></TableRow>) : alerts.map(a => (
+              <TableRow key={a.id} className={a.status === 'New' ? 'bg-red-50/40' : ''}>
+                <TableCell className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString('id-ID')}</TableCell>
+                <TableCell className="text-sm font-medium">{a.memberName}<div className="text-xs text-slate-400">{a.memberAge} th • {a.userEmail}</div></TableCell>
+                <TableCell className="text-sm">{a.instrumentName}</TableCell>
+                <TableCell className="text-sm">{a.type}</TableCell>
+                <TableCell className="text-center"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${SEV_CLS[a.severity] || 'bg-slate-100'}`}>{a.severity}</span></TableCell>
+                <TableCell><Select value={a.status} onValueChange={v => changeStatus(a.id, v)}><SelectTrigger className={`w-36 h-8 text-xs ${STATUS_CLS[a.status]}`}><SelectValue /></SelectTrigger><SelectContent>{['New', 'Under Review', 'Referred', 'Resolved'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></TableCell>
+                <TableCell><Button size="sm" variant="outline" onClick={() => openDetail(a.id)}>Detail</Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent></Card>
+      <Dialog open={!!detail} onOpenChange={o => !o && setDetail(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Detail Alert</DialogTitle></DialogHeader>
+          {detail && (<div className="space-y-2 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Pasien</span><span className="font-medium">{detail.memberName} ({detail.memberAge} th)</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Kontak User</span><span>{detail.userEmail}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Instrumen</span><span>{detail.instrumentName}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Tipe</span><span className="font-medium text-red-600">{detail.type}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Kategori Hasil</span><CatBadge cat={detail.category} /></div>
+            {detail.assessment && (<div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="font-semibold mb-1">Rekomendasi Otomatis</div><ul className="list-disc pl-4 space-y-1 text-slate-600">{detail.assessment.result.recommendations.map((r, i) => <li key={i}>{r}</li>)}</ul></div>)}
+          </div>)}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function NumPair({ label, arr, onChange }) {
+  return <div className="flex items-center gap-2"><span className="text-sm text-slate-600 w-40">{label}</span><Input type="number" className="w-20 h-8" value={arr[0]} onChange={e => onChange([Number(e.target.value), arr[1]])} /><span className="text-slate-400">/</span><Input type="number" className="w-20 h-8" value={arr[1]} onChange={e => onChange([arr[0], Number(e.target.value)])} /></div>
+}
+
+function AdminInstruments({ aapi }) {
+  const [list, setList] = useState([])
+  const [code, setCode] = useState(null)
+  const [inst, setInst] = useState(null)
+  const [saving, setSaving] = useState(false)
+  useEffect(() => { aapi('/admin/instruments').then(l => { setList(l); if (l[0]) selectInst(l[0].code) }).catch(e => toast.error(e.message)) }, [])
+  function selectInst(c) { setCode(c); aapi(`/admin/instruments/${c}`).then(setInst).catch(e => toast.error(e.message)) }
+  function upd(patch) { setInst(prev => ({ ...prev, ...patch })) }
+  function updItem(idx, patch) { setInst(prev => ({ ...prev, items: prev.items.map((it, i) => i === idx ? { ...it, ...patch } : it) })) }
+  async function save() {
+    try { setSaving(true); await aapi(`/admin/instruments/${code}`, { method: 'PUT', body: inst }); toast.success('Kuesioner disimpan') } catch (e) { toast.error(e.message) } finally { setSaving(false) }
+  }
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
+        <h3 className="text-lg font-bold text-slate-800">Master Kuesioner &amp; Skoring</h3>
+        <Select value={code || ''} onValueChange={selectInst}><SelectTrigger className="w-72"><SelectValue placeholder="Pilih instrumen" /></SelectTrigger><SelectContent>{list.map(i => <SelectItem key={i.code} value={i.code}>{i.name}</SelectItem>)}</SelectContent></Select>
+        {inst && <Button onClick={save} disabled={saving} className="bg-teal-600 hover:bg-teal-700 ml-auto"><Save className="h-4 w-4 mr-1" /> {saving ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>}
+      </div>
+      {!inst ? <div className="text-slate-500">Memuat...</div> : (
+        <div className="space-y-5">
+          <Card><CardContent className="py-4 space-y-3">
+            <div><Label>Nama Instrumen</Label><Input value={inst.name} onChange={e => upd({ name: e.target.value })} /></div>
+            <div><Label>Instruksi</Label><Textarea value={inst.instruction} onChange={e => upd({ instruction: e.target.value })} /></div>
+          </CardContent></Card>
+
+          <Card><CardHeader><CardTitle className="text-base">Daftar Soal ({inst.items.length})</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              {inst.items.map((it, idx) => (
+                <div key={it.id} className="flex items-start gap-2 border-b pb-2">
+                  <span className="text-xs font-bold text-slate-400 w-6 pt-2">{it.id}</span>
+                  <Textarea value={it.text} onChange={e => updItem(idx, { text: e.target.value })} className="flex-1 min-h-[38px]" rows={1} />
+                  {inst.family === 'sdq' && (<><Select value={it.sub} onValueChange={v => updItem(idx, { sub: v })}><SelectTrigger className="w-20 h-9"><SelectValue /></SelectTrigger><SelectContent>{['E', 'C', 'H', 'P', 'Pr'].map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select><label className="flex items-center gap-1 text-xs text-slate-500 pt-2 whitespace-nowrap"><input type="checkbox" checked={!!it.reversed} onChange={e => updItem(idx, { reversed: e.target.checked })} /> reversed</label></>)}
+                  {inst.family === 'ghq12' && (<Select value={it.sub} onValueChange={v => updItem(idx, { sub: v })}><SelectTrigger className="w-24 h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="D">Distres</SelectItem><SelectItem value="S">Sosial</SelectItem></SelectContent></Select>)}
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+
+          {inst.family === 'sdq' && (
+            <Card><CardHeader><CardTitle className="text-base">Batas Skor (Cutoff) — [Normal maks / Ambang maks]</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                {['E', 'C', 'H', 'P', 'total'].map(k => <NumPair key={k} label={k === 'total' ? 'Total Kesulitan' : SUB_NAMES_CLIENT[k]} arr={inst.cutoffs[k]} onChange={v => upd({ cutoffs: { ...inst.cutoffs, [k]: v } })} />)}
+                <NumPair label="Prososial [Normal min / Ambang nilai]" arr={inst.cutoffs.prosocial} onChange={v => upd({ cutoffs: { ...inst.cutoffs, prosocial: v } })} />
+              </CardContent>
+            </Card>
+          )}
+          {inst.family === 'sdq' && (
+            <Card><CardHeader><CardTitle className="text-base">Teks Rekomendasi</CardTitle></CardHeader>
+              <CardContent className="space-y-3">{['Normal', 'Ambang', 'Abnormal'].map(k => <div key={k}><Label>{k}</Label><Textarea value={inst.recommendations[k]} onChange={e => upd({ recommendations: { ...inst.recommendations, [k]: e.target.value } })} /></div>)}</CardContent>
+            </Card>
+          )}
+          {inst.family === 'phq9' && (
+            <Card><CardHeader><CardTitle className="text-base">Batas Keparahan (Cutoff) &amp; Rekomendasi</CardTitle></CardHeader>
+              <CardContent className="space-y-2">
+                <div className="text-xs text-slate-500 mb-1 flex items-center gap-2">Item Red Flag (bunuh diri): No. <Input type="number" value={inst.suicideItem} onChange={e => upd({ suicideItem: Number(e.target.value) })} className="w-16 h-7" /></div>
+                {inst.severityBands.map((b, i) => (
+                  <div key={i} className="flex items-center gap-2 border-b pb-2">
+                    <span className="text-xs text-slate-500 w-14">≤ skor</span>
+                    <Input type="number" className="w-20 h-8" value={b.max} onChange={e => { const sb = [...inst.severityBands]; sb[i] = { ...b, max: Number(e.target.value) }; upd({ severityBands: sb }) }} />
+                    <Input className="w-32 h-8" value={b.label} onChange={e => { const sb = [...inst.severityBands]; sb[i] = { ...b, label: e.target.value }; upd({ severityBands: sb }) }} />
+                    <Textarea className="flex-1 min-h-[36px]" rows={1} value={b.rec} onChange={e => { const sb = [...inst.severityBands]; sb[i] = { ...b, rec: e.target.value }; upd({ severityBands: sb }) }} />
+                  </div>
+                ))}
+                <div><Label>Kategori yang memicu Red Flag (pisahkan koma)</Label><Input value={(inst.redFlagSeverities || []).join(', ')} onChange={e => upd({ redFlagSeverities: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></div>
+              </CardContent>
+            </Card>
+          )}
+          {inst.family === 'ghq12' && (
+            <Card><CardHeader><CardTitle className="text-base">Ambang &amp; Rekomendasi</CardTitle></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex items-center gap-2"><Label className="w-40">Ambang Skor Total</Label><Input type="number" className="w-24 h-8" value={inst.threshold} onChange={e => upd({ threshold: Number(e.target.value) })} /></div>
+                <div><Label>Rekomendasi (Ada Masalah)</Label><Textarea value={inst.recommendations.problem} onChange={e => upd({ recommendations: { ...inst.recommendations, problem: e.target.value } })} /></div>
+                <div><Label>Rekomendasi (Normal)</Label><Textarea value={inst.recommendations.normal} onChange={e => upd({ recommendations: { ...inst.recommendations, normal: e.target.value } })} /></div>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AdminAgeRules({ aapi }) {
+  const [rules, setRules] = useState(null)
+  useEffect(() => { aapi('/admin/age-rules').then(d => setRules(d.rules)).catch(e => toast.error(e.message)) }, [])
+  function updRule(i, patch) { setRules(rules.map((r, idx) => idx === i ? { ...r, ...patch } : r)) }
+  function addRule() { setRules([...rules, { minAge: 0, maxAge: 0, codes: [], label: '' }]) }
+  function delRule(i) { setRules(rules.filter((_, idx) => idx !== i)) }
+  async function save() { try { await aapi('/admin/age-rules', { method: 'PUT', body: { rules } }); toast.success('Aturan usia disimpan') } catch (e) { toast.error(e.message) } }
+  if (!rules) return <div className="text-slate-500">Memuat...</div>
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4"><h3 className="text-lg font-bold text-slate-800">Aturan Routing Berdasarkan Usia</h3><div className="flex gap-2"><Button variant="outline" size="sm" onClick={addRule}><Plus className="h-4 w-4 mr-1" /> Aturan</Button><Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={save}><Save className="h-4 w-4 mr-1" /> Simpan</Button></div></div>
+      <Card><CardContent className="p-0"><Table>
+        <TableHeader><TableRow><TableHead>Label</TableHead><TableHead>Usia Min</TableHead><TableHead>Usia Maks</TableHead><TableHead>Kode Instrumen (pisah koma)</TableHead><TableHead></TableHead></TableRow></TableHeader>
+        <TableBody>{rules.map((r, i) => (
+          <TableRow key={i}>
+            <TableCell><Input className="h-8" value={r.label || ''} onChange={e => updRule(i, { label: e.target.value })} /></TableCell>
+            <TableCell><Input type="number" className="h-8 w-20" value={r.minAge} onChange={e => updRule(i, { minAge: Number(e.target.value) })} /></TableCell>
+            <TableCell><Input type="number" className="h-8 w-20" value={r.maxAge} onChange={e => updRule(i, { maxAge: Number(e.target.value) })} /></TableCell>
+            <TableCell><Input className="h-8" value={(r.codes || []).join(', ')} onChange={e => updRule(i, { codes: e.target.value.split(',').map(s => s.trim()).filter(Boolean) })} /></TableCell>
+            <TableCell><button onClick={() => delRule(i)} className="text-red-500"><Trash2 className="h-4 w-4" /></button></TableCell>
+          </TableRow>))}</TableBody>
+      </Table></CardContent></Card>
+      <p className="text-xs text-slate-400 mt-2">Kode tersedia: sdq_parent, sdq_self, phq9, ghq12</p>
+    </div>
+  )
+}
+
+function AdminLogs({ aapi }) {
+  const [logs, setLogs] = useState([])
+  useEffect(() => { aapi('/admin/audit-logs').then(setLogs).catch(e => toast.error(e.message)) }, [])
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-slate-800 mb-4">Audit Trail / Log Aktivitas</h3>
+      <Card><CardContent className="p-0"><Table>
+        <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Aktor</TableHead><TableHead>Aksi</TableHead><TableHead>Detail</TableHead></TableRow></TableHeader>
+        <TableBody>{logs.length === 0 ? (<TableRow><TableCell colSpan={4} className="text-center text-slate-400 py-8">Belum ada aktivitas.</TableCell></TableRow>) : logs.map(l => (
+          <TableRow key={l.id}><TableCell className="text-xs whitespace-nowrap">{new Date(l.createdAt).toLocaleString('id-ID')}</TableCell><TableCell className="text-sm">{l.actorName} <span className="text-xs text-slate-400">({l.actorRole})</span></TableCell><TableCell className="text-sm font-medium">{l.action}</TableCell><TableCell className="text-sm text-slate-500">{l.detail}</TableCell></TableRow>))}</TableBody>
+      </Table></CardContent></Card>
+    </div>
   )
 }
