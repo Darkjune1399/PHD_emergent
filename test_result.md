@@ -224,3 +224,83 @@ agent_communication:
     -message: "ADMIN PANEL added + backend refactored to DB-driven config (instruments/scoring/age-rules seeded in MongoDB on first run; seeded super admin admin@siap.id/admin123). TEST: (1) Login admin@siap.id/admin123 -> role super_admin. (2) A normal 'user' token must get 403 on any /admin/*. (3) REGRESSION scoring still accurate after refactor: SDQ all-answers=0 -> E=0,C=2,H=4,P=4,Pr=0,Total=10; PHQ-9 answers item9>0 -> suicideRisk & redFlag true & alert doc created; GHQ-12 all=2 -> total=24 redFlag true. (4) GET /admin/stats -> {total, distribution{Normal,Ambang,Abnormal}, trend(14), alertStatus, newAlerts, totalUsers, totalMembers}. (5) PATCH /admin/alerts/:id status transitions New->Under Review->Referred->Resolved & GET /admin/audit-logs shows entry. (6) GET /admin/instruments, GET/PUT /admin/instruments/phq9 (edit a severity band label, save, re-run assessment to confirm new config used). (7) GET/PUT /admin/age-rules. Setup: register a normal user, add members dob giving age 5/14/30, submit assessments to populate alerts/stats before testing admin reads."
     -agent: "testing"
     -message: "🎉 ADMIN PANEL BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 10 major categories with 15+ individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Admin authentication working (admin@siap.id/admin123 -> super_admin). ✅ RBAC enforced correctly (normal user gets 403, no token gets 401, admin gets 200). ✅ REGRESSION: SDQ scoring accurate after DB-driven refactor (E=0,C=2,H=4,P=4,Pr=0,Total=10). ✅ Dashboard stats endpoint returns all required metrics. ✅ Alert management: list, filter, status transitions (New->Under Review->Referred->Resolved), detail view with nested assessment. ✅ Instrument configuration: list, get detail, edit and persist changes. ✅ Age rules: get and update. ✅ Audit logs: captures alert status changes and instrument edits. NO ISSUES FOUND. Backend admin panel is production-ready. All endpoints working correctly with proper authentication, authorization, and data persistence."
+
+## ---- UPDATE 2: USER MGMT + REFERRALS ----
+agent_communication:
+    -agent: "main"
+    -message: "New admin endpoints to test (admin token admin@siap.id/admin123). USER MGMT: GET /admin/users -> list role=user users with {status, memberCount, assessmentCount}; PATCH /admin/users/:id body {status:'suspended'} then {status:'active'} (invalid status -> 400); POST /admin/users/:id/reset-password body {newPassword} (min 4 chars else 400) then verify the user can login with the new password and CANNOT with old. Also verify a SUSPENDED user gets 403 on POST /api/auth/login. REFERRALS: GET /admin/referrals; POST /admin/referrals {name,type,contact,note}; DELETE /admin/referrals/:id; confirm public GET /api/referrals (user token) reflects added referral. RBAC: normal user token -> 403 on /admin/users and /admin/referrals."
+
+backend_user_mgmt:
+  - task: "User Management (GET /admin/users, PATCH suspend/activate, POST reset-password)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented GET /admin/users (returns users with memberCount, assessmentCount), PATCH /admin/users/:id (suspend/activate with status validation), POST /admin/users/:id/reset-password (min 4 chars validation). Suspended users blocked at login (403)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL USER MANAGEMENT TESTS PASSED (100% SUCCESS). Comprehensive testing completed with 10 test scenarios. SETUP: Created normal user with 1 member and 1 assessment. USER MANAGEMENT ENDPOINTS ALL WORKING: (1) GET /admin/users returns 10 users with correct fields (status, memberCount=1, assessmentCount=1) - no passwordHash in response. (2) PATCH /admin/users/:id with {status:'suspended'} successfully suspends user (200, status='suspended'). (3) Suspended user CANNOT login - correctly returns 403 'Akun Anda ditangguhkan'. (4) PATCH /admin/users/:id with {status:'active'} successfully reactivates user (200, status='active'). (5) Active user CAN login - correctly returns 200 with token. (6) PATCH with {status:'invalid'} correctly rejected with 400 'Status tidak valid'. (7) POST /admin/users/:id/reset-password with {newPassword:'newpass456'} successfully resets password (200). (8) Login with old password 'oldpass123' correctly rejected with 401. (9) Login with new password 'newpass456' works correctly (200 with token). (10) POST reset-password with {newPassword:'a'} (too short) correctly rejected with 400 'Password minimal 4 karakter'. All status codes, error messages, and data validations working perfectly."
+
+backend_referrals_admin:
+  - task: "Referrals Admin CRUD (GET /admin/referrals, POST, DELETE)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented GET /admin/referrals (list all), POST /admin/referrals (create with name/type/contact/note), DELETE /admin/referrals/:id. Public GET /referrals endpoint reflects changes."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL REFERRALS TESTS PASSED (100% SUCCESS). Tested 5 scenarios covering full CRUD lifecycle. REFERRALS ENDPOINTS ALL WORKING: (1) GET /admin/referrals returns 2 default seeded contacts (200, count=2). (2) POST /admin/referrals with {name:'RSJ Test', type:'Rumah Sakit Jiwa (RSJ)', contact:'021-000', note:'test'} successfully creates referral (200, returns id=443c15dc-c399-4ada-9797-a6274324d5d1). (3) GET /referrals (public endpoint with normal user token) returns 3 referrals including 'RSJ Test' (200, count=3) - confirms public endpoint reflects admin changes. (4) DELETE /admin/referrals/:id successfully removes referral (200, ok=true). (5) GET /admin/referrals confirms 'RSJ Test' removed from list. Full CRUD cycle working correctly with proper data persistence."
+
+backend_rbac_user_mgmt:
+  - task: "RBAC for User Management & Referrals (normal user gets 403)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "All /admin/* routes check user role. Normal users (role='user') should get 403 on /admin/users and /admin/referrals."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL RBAC TESTS PASSED (100% SUCCESS). Tested 2 scenarios with normal user token. RBAC CORRECTLY ENFORCED: (1) Normal user token on GET /admin/users correctly returns 403 'Akses ditolak (bukan admin)'. (2) Normal user token on GET /admin/referrals correctly returns 403 'Akses ditolak (bukan admin)'. Authorization checks working perfectly - only admin roles (super_admin, admin_medis, admin_teknis) can access /admin/* endpoints."
+
+agent_communication:
+    -agent: "testing"
+    -message: "🎉 USER MANAGEMENT & REFERRALS BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 3 major categories with 17 individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ User Management: GET /admin/users with memberCount/assessmentCount, PATCH suspend/activate with status validation, POST reset-password with length validation, suspended user login blocked (403), password reset working correctly. ✅ Referrals: GET /admin/referrals, POST create new referral, DELETE remove referral, public GET /referrals reflects changes. ✅ RBAC: Normal user correctly denied (403) on /admin/users and /admin/referrals. NO ISSUES FOUND. All endpoints working correctly with proper status codes, error messages, data validation, and authorization checks. Backend is production-ready."
+
+## ---- UPDATE 3: ADMIN PANEL FRONTEND ----
+frontend_admin:
+  - task: "Admin Panel UI - Dashboard, Red Flag Alerts, Master Kuesioner, Aturan Usia, Manajemen User, Rujukan, Audit Log tabs"
+    implemented: true
+    working: true
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Admin panel frontend implemented with 7 tabs: Dashboard (stats, charts), Red Flag Alerts (table, status mgmt, detail dialog), Master Kuesioner (instrument editor), Aturan Usia (age rules table), Manajemen User (suspend/activate, reset password), Rujukan (add/delete referrals), Audit Log (activity log). Needs comprehensive UI testing."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL ADMIN PANEL FRONTEND TESTS PASSED (100% SUCCESS). Comprehensive testing completed across all 7 tabs. DASHBOARD TAB: ✅ 4 stat cards visible (Total Asesmen: 15, Alert Baru: 7, User Terdaftar: 10, Anggota Keluarga: 16). ✅ 2 charts rendering correctly (Tren Asesmen 14-day line chart, Distribusi Kategori bar chart). ✅ Status Penanganan Alert section with 4 status counts (New: 7, Under Review: 0, Referred: 0, Resolved: 1). RED FLAG ALERTS TAB: ✅ Table with 8 alert rows, all headers visible (Waktu, Pasien, Instrumen, Tipe Risiko, Severity, Status). ✅ Status dropdown working - changed first alert to 'Under Review' with success toast 'Status diperbarui'. ✅ Detail button opens dialog showing patient info, instrument, category, and 'Rekomendasi Otomatis' section. ✅ Status filter dropdown working (tested 'Resolved' and 'Semua Status'). MASTER KUESIONER TAB: ✅ Instrument selector working. ✅ PHQ-9 selected: 9 questions visible, Batas Keparahan section visible, Red Flag item field visible. ✅ Edited instrument name from 'PHQ-9 (Skrining Depresi)' to 'PHQ-9 (Skrining Depresi) X' and saved successfully with toast 'Kuesioner disimpan'. ✅ SDQ selected: 25 questions with E/C/H/P/Pr subscale selectors, 25 'reversed' checkboxes, Cutoff section visible. ATURAN USIA TAB: ✅ Table with 3 age rules (Anak 4-10→sdq_parent, Remaja 11-18→sdq_self, Dewasa >18→phq9+ghq12). ✅ All headers visible (Label, Usia Min, Usia Maks, Kode Instrumen). ✅ Save button working with success toast 'Aturan usia disimpan'. MANAJEMEN USER TAB: ✅ Table with 10 users, all headers visible (Nama, Email, Anggota, Asesmen, Status, Aksi). ✅ Suspend/Activate working perfectly: clicked Suspend on first user → toast 'Akun ditangguhkan' → status badge changed to 'Ditangguhkan' → clicked Aktifkan → toast 'Akun diaktifkan' → status badge changed back to 'Aktif'. ✅ Reset Password working: clicked Reset → dialog opened → entered 'reset123' → clicked 'Simpan Password' → toast 'Password direset'. RUJUKAN TAB: ✅ 'Tambah Rujukan' form visible with 2 existing referrals. ✅ Added new referral 'Klinik Uji' with contact '021-123' → toast 'Rujukan ditambahkan' → referral appeared in list. ✅ Deleted 'Klinik Uji' → toast 'Rujukan dihapus' → referral removed from list. AUDIT LOG TAB: ✅ Table with 20 audit entries, all headers visible (Waktu, Aktor, Aksi, Detail). ✅ Found expected audit entries: 'Ubah Status Alert', 'Suspend Akun User', 'Reset Password User', 'Ubah Master Kuesioner'. NO CONSOLE ERRORS detected. All core functionality working correctly. Admin panel is production-ready."
+
+agent_communication:
+    -agent: "main"
+    -message: "Admin panel frontend needs comprehensive testing. Test all 7 tabs: (1) Dashboard - verify 4 stat cards, 2 charts, status section. (2) Red Flag Alerts - verify table, test status dropdown, detail dialog, filters. (3) Master Kuesioner - select PHQ-9, edit name, save; select SDQ, verify questions. (4) Aturan Usia - verify 3 age rules, test save. (5) Manajemen User - test suspend/activate, reset password. (6) Rujukan - add and delete referral. (7) Audit Log - verify entries. Login: admin@siap.id / admin123. Note: first API request may take 10-30s (cold compile)."
+    -agent: "testing"
+    -message: "🎉 ADMIN PANEL FRONTEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested all 7 tabs with 30+ individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Dashboard: stat cards, charts, status section all rendering correctly. ✅ Red Flag Alerts: table, status changes, detail dialog, filters all working. ✅ Master Kuesioner: PHQ-9 and SDQ instrument editing working, save functionality confirmed. ✅ Aturan Usia: age rules table and save working. ✅ Manajemen User: suspend/activate and reset password working perfectly with correct status badge updates and toasts. ✅ Rujukan: add and delete referrals working correctly. ✅ Audit Log: entries visible reflecting all actions performed. NO ISSUES FOUND. No console errors detected. Admin panel UI is fully functional and production-ready. All Indonesian language labels correct, all toasts displaying properly, all CRUD operations working as expected."

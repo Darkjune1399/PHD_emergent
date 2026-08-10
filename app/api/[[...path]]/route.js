@@ -510,7 +510,41 @@ async function handleRoute(request, { params }) {
       }
       if (route.startsWith('/admin/referrals/') && method === 'DELETE') {
         await db.collection('referrals').deleteOne({ id: path[2] })
+        await audit(db, user, 'Hapus Rujukan', path[2])
         return handleCORS(NextResponse.json({ ok: true }))
+      }
+
+      // ---- User Management ----
+      if (route === '/admin/users' && method === 'GET') {
+        const users = await db.collection('users').find({ role: 'user' }).sort({ createdAt: -1 }).toArray()
+        const out = []
+        for (const u of users) {
+          const { _id, passwordHash, ...safe } = u
+          const memberCount = await db.collection('members').countDocuments({ userId: u.id })
+          const assessmentCount = await db.collection('assessments').countDocuments({ userId: u.id })
+          out.push({ ...safe, status: safe.status || 'active', memberCount, assessmentCount })
+        }
+        return handleCORS(NextResponse.json(out))
+      }
+      if (route.startsWith('/admin/users/') && path[3] === 'reset-password' && method === 'POST') {
+        const id = path[2]; const { newPassword } = await request.json()
+        if (!newPassword || newPassword.length < 4) return handleCORS(NextResponse.json({ error: 'Password minimal 4 karakter' }, { status: 400 }))
+        const target = await db.collection('users').findOne({ id })
+        if (!target) return handleCORS(NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 }))
+        await db.collection('users').updateOne({ id }, { $set: { passwordHash: hashPassword(newPassword) } })
+        await audit(db, user, 'Reset Password User', `${target.email}`)
+        return handleCORS(NextResponse.json({ ok: true }))
+      }
+      if (route.startsWith('/admin/users/') && method === 'PATCH') {
+        const id = path[2]; const { status } = await request.json()
+        if (!['active', 'suspended'].includes(status)) return handleCORS(NextResponse.json({ error: 'Status tidak valid' }, { status: 400 }))
+        const target = await db.collection('users').findOne({ id })
+        if (!target) return handleCORS(NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 }))
+        await db.collection('users').updateOne({ id }, { $set: { status } })
+        await audit(db, user, status === 'suspended' ? 'Suspend Akun User' : 'Aktifkan Akun User', `${target.email}`)
+        const u = await db.collection('users').findOne({ id })
+        const { _id, passwordHash, ...safe } = u
+        return handleCORS(NextResponse.json(safe))
       }
     }
 

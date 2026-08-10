@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw } from 'lucide-react'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser } from 'lucide-react'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
 const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
@@ -527,12 +527,16 @@ function AdminPanel({ user, token, logout }) {
             <TabsTrigger value="alerts"><Bell className="h-4 w-4 mr-1" /> Red Flag Alerts</TabsTrigger>
             <TabsTrigger value="kuesioner"><ListChecks className="h-4 w-4 mr-1" /> Master Kuesioner</TabsTrigger>
             <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>
+            <TabsTrigger value="users"><UserCog className="h-4 w-4 mr-1" /> Manajemen User</TabsTrigger>
+            <TabsTrigger value="rujukan"><BookUser className="h-4 w-4 mr-1" /> Rujukan</TabsTrigger>
             <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><AdminDashboard aapi={aapi} /></TabsContent>
           <TabsContent value="alerts"><AdminAlerts aapi={aapi} /></TabsContent>
           <TabsContent value="kuesioner"><AdminInstruments aapi={aapi} /></TabsContent>
           <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>
+          <TabsContent value="users"><AdminUsers aapi={aapi} /></TabsContent>
+          <TabsContent value="rujukan"><AdminReferrals aapi={aapi} /></TabsContent>
           <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>
         </Tabs>
       </div>
@@ -747,6 +751,97 @@ function AdminAgeRules({ aapi }) {
           </TableRow>))}</TableBody>
       </Table></CardContent></Card>
       <p className="text-xs text-slate-400 mt-2">Kode tersedia: sdq_parent, sdq_self, phq9, ghq12</p>
+    </div>
+  )
+}
+
+function AdminUsers({ aapi }) {
+  const [users, setUsers] = useState([])
+  const [resetTarget, setResetTarget] = useState(null)
+  const [newPass, setNewPass] = useState('')
+  const load = () => aapi('/admin/users').then(setUsers).catch(e => toast.error(e.message))
+  useEffect(() => { load() }, [])
+  async function toggleStatus(u) {
+    const status = u.status === 'suspended' ? 'active' : 'suspended'
+    try { await aapi(`/admin/users/${u.id}`, { method: 'PATCH', body: { status } }); toast.success(status === 'suspended' ? 'Akun ditangguhkan' : 'Akun diaktifkan'); load() } catch (e) { toast.error(e.message) }
+  }
+  async function doReset(e) {
+    e.preventDefault()
+    try { await aapi(`/admin/users/${resetTarget.id}/reset-password`, { method: 'POST', body: { newPassword: newPass } }); toast.success('Password direset'); setResetTarget(null); setNewPass('') } catch (e) { toast.error(e.message) }
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><UserCog className="h-5 w-5 text-teal-600" /> Manajemen User</h3>
+      <Card><CardContent className="p-0"><Table>
+        <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Email</TableHead><TableHead className="text-center">Anggota</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+        <TableBody>{users.length === 0 ? (<TableRow><TableCell colSpan={6} className="text-center text-slate-400 py-8">Belum ada user terdaftar.</TableCell></TableRow>) : users.map(u => (
+          <TableRow key={u.id} className={u.status === 'suspended' ? 'bg-red-50/40' : ''}>
+            <TableCell className="font-medium">{u.name}</TableCell>
+            <TableCell className="text-sm text-slate-500">{u.email}</TableCell>
+            <TableCell className="text-center">{u.memberCount}</TableCell>
+            <TableCell className="text-center">{u.assessmentCount}</TableCell>
+            <TableCell className="text-center"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{u.status === 'suspended' ? 'Ditangguhkan' : 'Aktif'}</span></TableCell>
+            <TableCell className="text-right space-x-1">
+              <Button size="sm" variant="outline" onClick={() => setResetTarget(u)}><KeyRound className="h-3.5 w-3.5 mr-1" /> Reset</Button>
+              {u.status === 'suspended'
+                ? <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => toggleStatus(u)}><CheckCircle2 className="h-3.5 w-3.5 mr-1" /> Aktifkan</Button>
+                : <Button size="sm" variant="destructive" onClick={() => toggleStatus(u)}><Ban className="h-3.5 w-3.5 mr-1" /> Suspend</Button>}
+            </TableCell>
+          </TableRow>))}</TableBody>
+      </Table></CardContent></Card>
+      <Dialog open={!!resetTarget} onOpenChange={o => { if (!o) { setResetTarget(null); setNewPass('') } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Reset Password</DialogTitle><DialogDescription>{resetTarget?.email}</DialogDescription></DialogHeader>
+          <form onSubmit={doReset} className="space-y-4">
+            <div><Label>Password Baru</Label><Input type="text" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 4 karakter" required /></div>
+            <DialogFooter><Button type="submit" className="bg-teal-600 hover:bg-teal-700">Simpan Password</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function AdminReferrals({ aapi }) {
+  const [refs, setRefs] = useState([])
+  const [form, setForm] = useState({ name: '', type: 'Hotline', contact: '', note: '' })
+  const load = () => aapi('/admin/referrals').then(setRefs).catch(e => toast.error(e.message))
+  useEffect(() => { load() }, [])
+  async function add(e) {
+    e.preventDefault()
+    if (!form.name || !form.contact) { toast.error('Nama dan kontak wajib diisi'); return }
+    try { await aapi('/admin/referrals', { method: 'POST', body: form }); toast.success('Rujukan ditambahkan'); setForm({ name: '', type: 'Hotline', contact: '', note: '' }); load() } catch (e) { toast.error(e.message) }
+  }
+  async function del(id) { try { await aapi(`/admin/referrals/${id}`, { method: 'DELETE' }); toast.success('Rujukan dihapus'); load() } catch (e) { toast.error(e.message) } }
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BookUser className="h-5 w-5 text-teal-600" /> Direktori Rujukan &amp; Kontak Darurat</h3>
+      <p className="text-sm text-slate-500 mb-4">Kontak berikut otomatis ditampilkan pada layar hasil pasien berisiko tinggi (mis. terdeteksi ide bunuh diri).</p>
+      <div className="grid gap-5 lg:grid-cols-3">
+        <Card className="lg:col-span-1"><CardHeader><CardTitle className="text-base">Tambah Rujukan</CardTitle></CardHeader>
+          <CardContent>
+            <form onSubmit={add} className="space-y-3">
+              <div><Label>Nama</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder="mis. RSJ / Psikolog" /></div>
+              <div><Label>Jenis</Label>
+                <Select value={form.type} onValueChange={v => setForm({ ...form, type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Hotline Darurat', 'Hotline', 'Klinik', 'Psikolog', 'Psikiater', 'Rumah Sakit Jiwa (RSJ)', 'Lainnya'].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select>
+              </div>
+              <div><Label>Kontak</Label><Input value={form.contact} onChange={e => setForm({ ...form, contact: e.target.value })} placeholder="Telepon / alamat" /></div>
+              <div><Label>Catatan</Label><Textarea value={form.note} onChange={e => setForm({ ...form, note: e.target.value })} rows={2} /></div>
+              <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700"><Plus className="h-4 w-4 mr-1" /> Tambah</Button>
+            </form>
+          </CardContent>
+        </Card>
+        <div className="lg:col-span-2 space-y-2">
+          {refs.length === 0 ? <Card><CardContent className="py-10 text-center text-slate-400">Belum ada rujukan.</CardContent></Card> : refs.map(r => (
+            <Card key={r.id}><CardContent className="py-3 flex items-center gap-3">
+              <div className="bg-red-100 text-red-600 rounded-lg p-2"><Phone className="h-5 w-5" /></div>
+              <div className="flex-1"><div className="font-semibold text-slate-800">{r.name} <Badge variant="outline" className="ml-1 text-[10px]">{r.type}</Badge></div><div className="text-xs text-slate-500">{r.note}</div></div>
+              <div className="font-bold text-slate-700">{r.contact}</div>
+              <button onClick={() => del(r.id)} className="text-slate-400 hover:text-red-600 ml-2"><Trash2 className="h-4 w-4" /></button>
+            </CardContent></Card>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
