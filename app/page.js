@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star } from 'lucide-react'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video } from 'lucide-react'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
 const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
@@ -228,7 +228,7 @@ function PublicSite({ onLogin }) {
         <div className="container flex items-center justify-between py-3">
           <button onClick={() => setActive(null)} className="flex items-center gap-2">
             <div className="bg-teal-600 rounded-lg p-2"><Brain className="h-5 w-5 text-white" /></div>
-            <div className="text-left"><div className="font-bold text-slate-800 leading-none">PHD</div><div className="text-[10px] text-slate-500">Psychological Health Detection</div></div>
+            <div className="text-left"><div className="font-bold text-slate-800 leading-none">PHD</div><div className="text-[10px] text-slate-500">Psychological Health Detector</div></div>
           </button>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" onClick={() => onLogin('login')}>Masuk</Button>
@@ -1071,6 +1071,39 @@ function AdminFeedback({ aapi }) {
   )
 }
 
+function RichTextEditor({ value, onChange }) {
+  const ref = useRef(null)
+  useEffect(() => { if (ref.current) ref.current.innerHTML = value || '' }, [])
+  function emit() { if (ref.current) onChange(ref.current.innerHTML) }
+  function exec(cmd, val = null) { ref.current?.focus(); document.execCommand(cmd, false, val); emit() }
+  function block(tag) { ref.current?.focus(); document.execCommand('formatBlock', false, tag); emit() }
+  function addLink() { const url = prompt('Masukkan URL tautan:'); if (url) exec('createLink', url) }
+  function addImage() { const url = prompt('Masukkan URL gambar:'); if (url) exec('insertHTML', `<img src="${url}" style="max-width:100%;border-radius:12px;margin:12px 0" />`) }
+  function addVideo() { const url = prompt('Masukkan URL YouTube atau video:'); if (!url) return; const embed = url.includes('watch?v=') ? url.replace('watch?v=', 'embed/').split('&')[0] : (url.includes('youtu.be/') ? url.replace('youtu.be/', 'www.youtube.com/embed/') : url); exec('insertHTML', `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;margin:12px 0"><iframe src="${embed}" style="position:absolute;top:0;left:0;width:100%;height:100%" frameborder="0" allowfullscreen></iframe></div><p></p>`) }
+  const Btn = ({ onClick, title, children }) => <button type="button" title={title} onMouseDown={e => e.preventDefault()} onClick={onClick} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-200 text-slate-600">{children}</button>
+  return (
+    <div className="border rounded-lg overflow-hidden">
+      <div className="flex flex-wrap items-center gap-0.5 border-b bg-slate-50 p-1">
+        <Btn title="Tebal" onClick={() => exec('bold')}><Bold className="h-4 w-4" /></Btn>
+        <Btn title="Miring" onClick={() => exec('italic')}><Italic className="h-4 w-4" /></Btn>
+        <Btn title="Garis bawah" onClick={() => exec('underline')}><Underline className="h-4 w-4" /></Btn>
+        <div className="w-px h-5 bg-slate-300 mx-1" />
+        <Btn title="Judul H2" onClick={() => block('H2')}><Heading2 className="h-4 w-4" /></Btn>
+        <Btn title="Judul H3" onClick={() => block('H3')}><Heading3 className="h-4 w-4" /></Btn>
+        <Btn title="Paragraf" onClick={() => block('P')}><span className="text-xs font-bold">P</span></Btn>
+        <div className="w-px h-5 bg-slate-300 mx-1" />
+        <Btn title="Daftar butir" onClick={() => exec('insertUnorderedList')}><List className="h-4 w-4" /></Btn>
+        <Btn title="Daftar bernomor" onClick={() => exec('insertOrderedList')}><ListOrdered className="h-4 w-4" /></Btn>
+        <div className="w-px h-5 bg-slate-300 mx-1" />
+        <Btn title="Tautan" onClick={addLink}><Link2 className="h-4 w-4" /></Btn>
+        <Btn title="Sisip gambar" onClick={addImage}><ImageIcon className="h-4 w-4" /></Btn>
+        <Btn title="Sisip video" onClick={addVideo}><Video className="h-4 w-4" /></Btn>
+      </div>
+      <div ref={ref} contentEditable suppressContentEditableWarning onInput={emit} onBlur={emit} className="article-content min-h-[320px] max-h-[520px] overflow-auto p-4 focus:outline-none text-slate-700 leading-relaxed" />
+    </div>
+  )
+}
+
 function AdminArticles({ aapi }) {
   const [list, setList] = useState([])
   const [edit, setEdit] = useState(null)
@@ -1097,25 +1130,13 @@ function AdminArticles({ aapi }) {
         <h3 className="text-lg font-bold text-slate-800">{edit.id ? 'Ubah Artikel' : 'Artikel Baru'}</h3>
         <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setEdit(null)}>Batal</Button><Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={save}><Save className="h-4 w-4 mr-1" /> Simpan</Button></div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="space-y-3">
-          <div><Label>Judul</Label><Input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} /></div>
-          <div><Label>URL Gambar Sampul</Label><Input value={edit.coverImage} onChange={e => setEdit({ ...edit, coverImage: e.target.value })} placeholder="https://..." /></div>
-          <div><Label>Ringkasan (excerpt)</Label><Textarea rows={2} value={edit.excerpt} onChange={e => setEdit({ ...edit, excerpt: e.target.value })} /></div>
-          <div>
-            <div className="flex items-center justify-between mb-1"><Label>Konten (HTML)</Label><div className="flex gap-1"><Button type="button" size="sm" variant="outline" onClick={addImage}><Plus className="h-3 w-3 mr-1" />Gambar</Button><Button type="button" size="sm" variant="outline" onClick={addVideo}><Plus className="h-3 w-3 mr-1" />Video</Button></div></div>
-            <Textarea rows={12} value={edit.content} onChange={e => setEdit({ ...edit, content: e.target.value })} className="font-mono text-xs" placeholder="Tulis konten. Gunakan tombol Gambar/Video untuk menyisipkan media." />
-          </div>
-          <div><Label>Status</Label><Select value={edit.status} onValueChange={v => setEdit({ ...edit, status: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="published">Publikasikan</SelectItem></SelectContent></Select></div>
-        </div>
-        <div>
-          <Label className="mb-1 block">Pratinjau</Label>
-          <div className="border rounded-lg p-4 h-[520px] overflow-auto bg-white">
-            {edit.coverImage && <img src={edit.coverImage} alt="cover" className="w-full h-40 object-cover rounded-lg mb-3" />}
-            <h2 className="text-xl font-bold text-slate-800 mb-2">{edit.title || '(Tanpa Judul)'}</h2>
-            <div className="article-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: edit.content || '<p class="text-slate-400">Konten pratinjau akan muncul di sini...</p>' }} />
-          </div>
-        </div>
+      <div className="space-y-3 max-w-3xl">
+        <div><Label>Judul</Label><Input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} /></div>
+        <div><Label>URL Gambar Sampul</Label><Input value={edit.coverImage} onChange={e => setEdit({ ...edit, coverImage: e.target.value })} placeholder="https://..." /></div>
+        {edit.coverImage && <img src={edit.coverImage} alt="cover" className="w-full h-40 object-cover rounded-lg" />}
+        <div><Label>Ringkasan (excerpt)</Label><Textarea rows={2} value={edit.excerpt} onChange={e => setEdit({ ...edit, excerpt: e.target.value })} /></div>
+        <div><Label>Konten</Label><RichTextEditor key={edit.id || 'new'} value={edit.content} onChange={html => setEdit(prev => ({ ...prev, content: html }))} /></div>
+        <div><Label>Status</Label><Select value={edit.status} onValueChange={v => setEdit({ ...edit, status: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="published">Publikasikan</SelectItem></SelectContent></Select></div>
       </div>
     </div>
   )
