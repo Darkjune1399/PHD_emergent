@@ -2,8 +2,8 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata = {
-  title: 'SIAP - Sistem Asesmen Kesehatan Psikologis',
-  description: 'Asesmen kesehatan mental otomatis keluarga: SDQ, GHQ-12, PHQ-9 dengan skoring & rekomendasi otomatis.',
+  title: 'PHD - Psychological Health Detection',
+  description: 'Deteksi & asesmen kesehatan mental otomatis keluarga: SDQ, GHQ-12, PHQ-9 dengan skoring & rekomendasi otomatis.',
 }
 
 export default function RootLayout({ children }) {

@@ -318,7 +318,7 @@ async function handleRoute(request, { params }) {
   const method = request.method
   try {
     const db = await connectToMongo()
-    if (route === '/' && method === 'GET') return handleCORS(NextResponse.json({ message: 'SIAP API aktif' }))
+    if (route === '/' && method === 'GET') return handleCORS(NextResponse.json({ message: 'PHD (Psychological Health Detection) API aktif' }))
 
     // ---------- AUTH ----------
     if (route === '/auth/register' && method === 'POST') {

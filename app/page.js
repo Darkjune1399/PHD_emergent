@@ -185,8 +185,8 @@ export default function App() {
           <button onClick={() => setView('dashboard')} className="flex items-center gap-2">
             <div className="bg-white/20 rounded-lg p-2"><Brain className="h-6 w-6" /></div>
             <div className="text-left">
-              <div className="font-bold text-lg leading-none">SIAP</div>
-              <div className="text-xs text-teal-50">Asesmen Kesehatan Psikologis</div>
+              <div className="font-bold text-lg leading-none">PHD</div>
+              <div className="text-xs text-teal-50">Psychological Health Detection</div>
             </div>
           </button>
           <div className="flex items-center gap-3">
@@ -602,7 +602,7 @@ function AdminPanel({ user, token, logout }) {
         <div className="container flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <div className="bg-teal-500/20 rounded-lg p-2"><ShieldCheck className="h-6 w-6 text-teal-400" /></div>
-            <div><div className="font-bold text-lg leading-none">SIAP Admin</div><div className="text-xs text-slate-300">Panel Administrasi Sistem</div></div>
+            <div><div className="font-bold text-lg leading-none">PHD Admin</div><div className="text-xs text-slate-300">Psychological Health Detection</div></div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block"><div className="text-sm font-medium">{user.name}</div><Badge className="bg-teal-500/20 text-teal-300 border-0 text-[10px]">{ROLE_LABEL[user.role] || user.role}</Badge></div>
