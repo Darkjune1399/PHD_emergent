@@ -2,7 +2,7 @@ import './globals.css'
 import { Providers } from './providers'
 
 export const metadata = {
-  title: 'PHD - Psychological Health Detection',
+  title: 'PHD - Psychological Health Detector',
   description: 'Deteksi & asesmen kesehatan mental otomatis keluarga: SDQ, GHQ-12, PHQ-9 dengan skoring & rekomendasi otomatis.',
 }
 

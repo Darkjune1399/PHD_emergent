@@ -191,6 +191,38 @@ function defaultAgeRules() {
     { minAge: 19, maxAge: 200, codes: ['phq9', 'ghq12'], label: 'Dewasa (>18 th)' },
   ] }
 }
+function slugify(s) {
+  return (s || 'artikel').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60) + '-' + Math.random().toString(36).slice(2, 7)
+}
+function defaultArticles() {
+  const now = Date.now()
+  return [
+    {
+      id: uuidv4(), slug: slugify('Mengenali Tanda Awal Gangguan Kesehatan Mental'),
+      title: 'Mengenali Tanda Awal Gangguan Kesehatan Mental', status: 'published', author: 'Tim PHD',
+      coverImage: 'https://images.pexels.com/photos/6136085/pexels-photo-6136085.jpeg',
+      excerpt: 'Deteksi dini adalah kunci. Kenali perubahan emosi, perilaku, dan pola tidur yang bisa menjadi sinyal awal.',
+      content: '<p>Kesehatan mental sama pentingnya dengan kesehatan fisik. Mengenali tanda awal dapat membantu penanganan lebih cepat dan efektif.</p><h3>Tanda yang perlu diperhatikan</h3><ul><li>Perubahan suasana hati yang drastis</li><li>Menarik diri dari lingkungan sosial</li><li>Gangguan tidur atau nafsu makan</li><li>Sulit berkonsentrasi</li></ul><img src="https://images.unsplash.com/photo-1604881991720-f91add269bed" alt="dukungan" style="width:100%;border-radius:12px;margin:16px 0" /><p>Jika Anda atau anggota keluarga mengalami tanda-tanda ini, lakukan skrining awal melalui PHD dan konsultasikan dengan profesional.</p>',
+      createdAt: new Date(now - 86400000 * 3), updatedAt: new Date(now - 86400000 * 3),
+    },
+    {
+      id: uuidv4(), slug: slugify('Menjaga Kesehatan Mental Keluarga'),
+      title: 'Tips Menjaga Kesehatan Mental Keluarga', status: 'published', author: 'Tim PHD',
+      coverImage: 'https://images.pexels.com/photos/5336933/pexels-photo-5336933.jpeg',
+      excerpt: 'Keluarga yang sehat secara mental dibangun dari komunikasi hangat dan kebiasaan positif setiap hari.',
+      content: '<p>Membangun keluarga yang sehat secara mental memerlukan konsistensi. Berikut beberapa kebiasaan yang bisa diterapkan:</p><ol><li>Luangkan waktu berkualitas bersama</li><li>Dengarkan tanpa menghakimi</li><li>Jaga rutinitas tidur dan aktivitas fisik</li></ol><p>Video singkat berikut menjelaskan pentingnya dukungan keluarga:</p><div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;margin:16px 0"><iframe src="https://www.youtube.com/embed/DxIDKZHW3-E" style="position:absolute;top:0;left:0;width:100%;height:100%" frameborder="0" allowfullscreen></iframe></div>',
+      createdAt: new Date(now - 86400000 * 1), updatedAt: new Date(now - 86400000 * 1),
+    },
+    {
+      id: uuidv4(), slug: slugify('Kapan Harus ke Psikolog'),
+      title: 'Kapan Sebaiknya Berkonsultasi dengan Psikolog?', status: 'published', author: 'Tim PHD',
+      coverImage: 'https://images.pexels.com/photos/7176139/pexels-photo-7176139.jpeg',
+      excerpt: 'Tidak perlu menunggu parah. Kenali kondisi yang menandakan Anda sebaiknya mencari bantuan profesional.',
+      content: '<p>Berkonsultasi dengan psikolog bukan tanda kelemahan, melainkan langkah bijak menjaga diri. Pertimbangkan konsultasi bila:</p><ul><li>Gejala berlangsung lebih dari 2 minggu</li><li>Mengganggu aktivitas sehari-hari</li><li>Muncul pikiran untuk menyakiti diri</li></ul><img src="https://images.unsplash.com/photo-1477332552946-cfb384aeaf1c" alt="tenang" style="width:100%;border-radius:12px;margin:16px 0" /><p>PHD menyediakan skrining awal dan rekomendasi rujukan untuk membantu Anda mengambil keputusan.</p>',
+      createdAt: new Date(now), updatedAt: new Date(now),
+    },
+  ]
+}
 async function ensureSeed(db) {
   const admin = await db.collection('users').findOne({ role: 'super_admin' })
   if (!admin) {
@@ -202,6 +234,8 @@ async function ensureSeed(db) {
   if (instCount === 0) await db.collection('instruments').insertMany(defaultInstruments())
   const ar = await db.collection('age_rules').findOne({ id: 'default' })
   if (!ar) await db.collection('age_rules').insertOne(defaultAgeRules())
+  const artCount = await db.collection('articles').countDocuments()
+  if (artCount === 0) await db.collection('articles').insertMany(defaultArticles())
   const refCount = await db.collection('referrals').countDocuments()
   if (refCount === 0) await db.collection('referrals').insertMany([
     { id: uuidv4(), name: 'Hotline SEJIWA (Kemenkes)', type: 'Hotline Darurat', contact: '119 ext 8', note: 'Konseling & pencegahan bunuh diri 24 jam' },
@@ -318,7 +352,7 @@ async function handleRoute(request, { params }) {
   const method = request.method
   try {
     const db = await connectToMongo()
-    if (route === '/' && method === 'GET') return handleCORS(NextResponse.json({ message: 'PHD (Psychological Health Detection) API aktif' }))
+    if (route === '/' && method === 'GET') return handleCORS(NextResponse.json({ message: 'PHD (Psychological Health Detector) API aktif' }))
 
     // ---------- AUTH ----------
     if (route === '/auth/register' && method === 'POST') {
@@ -450,6 +484,19 @@ async function handleRoute(request, { params }) {
     if (route === '/referrals' && method === 'GET') {
       const list = await db.collection('referrals').find({}).toArray()
       return handleCORS(NextResponse.json(list.map(({ _id, ...r }) => r)))
+    }
+
+    // ---------- ARTICLES (public) ----------
+    if (route === '/articles' && method === 'GET') {
+      const list = await db.collection('articles').find({ status: 'published' }).sort({ createdAt: -1 }).toArray()
+      return handleCORS(NextResponse.json(list.map(({ _id, content, ...a }) => a)))
+    }
+    if (route.startsWith('/articles/') && method === 'GET') {
+      const key = path[1]
+      const a = await db.collection('articles').findOne({ status: 'published', $or: [{ id: key }, { slug: key }] })
+      if (!a) return handleCORS(NextResponse.json({ error: 'Artikel tidak ditemukan' }, { status: 404 }))
+      const { _id, ...clean } = a
+      return handleCORS(NextResponse.json(clean))
     }
 
     // ---------- FEEDBACK (user) ----------
@@ -623,6 +670,37 @@ async function handleRoute(request, { params }) {
       }
       if (route.startsWith('/admin/feedback/') && method === 'DELETE') {
         await db.collection('feedback').deleteOne({ id: path[2] })
+        return handleCORS(NextResponse.json({ ok: true }))
+      }
+
+      // ---- Articles management ----
+      if (route === '/admin/articles' && method === 'GET') {
+        const list = await db.collection('articles').find({}).sort({ createdAt: -1 }).toArray()
+        return handleCORS(NextResponse.json(list.map(({ _id, ...a }) => a)))
+      }
+      if (route === '/admin/articles' && method === 'POST') {
+        const { title, excerpt, coverImage, content, status } = await request.json()
+        if (!title || !content) return handleCORS(NextResponse.json({ error: 'Judul dan konten wajib diisi' }, { status: 400 }))
+        const doc = { id: uuidv4(), slug: slugify(title), title, excerpt: excerpt || '', coverImage: coverImage || '', content, status: status || 'draft', author: user.name, createdAt: new Date(), updatedAt: new Date() }
+        await db.collection('articles').insertOne(doc)
+        await audit(db, user, 'Buat Artikel', title)
+        const { _id, ...clean } = doc
+        return handleCORS(NextResponse.json(clean))
+      }
+      if (route.startsWith('/admin/articles/') && method === 'PUT') {
+        const id = path[2]; const body = await request.json()
+        const upd = { updatedAt: new Date() }
+        for (const k of ['title', 'excerpt', 'coverImage', 'content', 'status']) if (body[k] !== undefined) upd[k] = body[k]
+        await db.collection('articles').updateOne({ id }, { $set: upd })
+        await audit(db, user, 'Ubah Artikel', body.title || id)
+        const a = await db.collection('articles').findOne({ id })
+        if (!a) return handleCORS(NextResponse.json({ error: 'Tidak ditemukan' }, { status: 404 }))
+        const { _id, ...clean } = a
+        return handleCORS(NextResponse.json(clean))
+      }
+      if (route.startsWith('/admin/articles/') && method === 'DELETE') {
+        await db.collection('articles').deleteOne({ id: path[2] })
+        await audit(db, user, 'Hapus Artikel', path[2])
         return handleCORS(NextResponse.json({ ok: true }))
       }
     }

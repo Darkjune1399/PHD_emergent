@@ -67,6 +67,7 @@ export default function App() {
   const [referrals, setReferrals] = useState([])
   const [emergencyOpen, setEmergencyOpen] = useState(false)
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const [showAuth, setShowAuth] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const [authMode, setAuthMode] = useState('login')
@@ -173,7 +174,9 @@ export default function App() {
 
   if (!booted) return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Brain className="h-8 w-8 text-teal-600 animate-pulse" /></div>
 
-  if (!token || !user) return <AuthScreen {...{ authMode, setAuthMode, af, setAf, handleAuth, loading }} />
+  if (!token || !user) return showAuth
+    ? <AuthScreen {...{ authMode, setAuthMode, af, setAf, handleAuth, loading }} onBack={() => setShowAuth(false)} />
+    : <PublicSite onLogin={(mode) => { setAuthMode(mode || 'login'); setShowAuth(true) }} />
 
   if (isAdminRole(user.role)) return <AdminPanel user={user} token={token} logout={logout} />
 
@@ -186,7 +189,7 @@ export default function App() {
             <div className="bg-white/20 rounded-lg p-2"><Brain className="h-6 w-6" /></div>
             <div className="text-left">
               <div className="font-bold text-lg leading-none">PHD</div>
-              <div className="text-xs text-teal-50">Psychological Health Detection</div>
+              <div className="text-xs text-teal-50">Psychological Health Detector</div>
             </div>
           </button>
           <div className="flex items-center gap-3">
@@ -212,7 +215,91 @@ export default function App() {
   )
 }
 
-function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
+const HERO_IMG = 'https://images.pexels.com/photos/7363322/pexels-photo-7363322.jpeg'
+function PublicSite({ onLogin }) {
+  const [articles, setArticles] = useState([])
+  const [active, setActive] = useState(null)
+  useEffect(() => { api('/articles').then(setArticles).catch(() => {}) }, [])
+  async function open(a) { try { const full = await api(`/articles/${a.id}`); setActive(full); window.scrollTo(0, 0) } catch (e) { toast.error(e.message) } }
+  return (
+    <div className="min-h-screen bg-white">
+      <Toaster position="top-center" richColors />
+      <nav className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b">
+        <div className="container flex items-center justify-between py-3">
+          <button onClick={() => setActive(null)} className="flex items-center gap-2">
+            <div className="bg-teal-600 rounded-lg p-2"><Brain className="h-5 w-5 text-white" /></div>
+            <div className="text-left"><div className="font-bold text-slate-800 leading-none">PHD</div><div className="text-[10px] text-slate-500">Psychological Health Detection</div></div>
+          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => onLogin('login')}>Masuk</Button>
+            <Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={() => onLogin('register')}>Daftar</Button>
+          </div>
+        </div>
+      </nav>
+
+      {active ? <ArticleDetail article={active} onBack={() => setActive(null)} onLogin={onLogin} /> : (
+        <>
+          <section className="relative">
+            <div className="absolute inset-0"><img src={HERO_IMG} alt="hero" className="w-full h-full object-cover" /><div className="absolute inset-0 bg-gradient-to-r from-teal-900/85 to-cyan-800/60" /></div>
+            <div className="relative container py-24 md:py-32 text-white max-w-2xl">
+              <h1 className="text-4xl md:text-5xl font-bold leading-tight">Deteksi Dini Kesehatan Mental Keluarga</h1>
+              <p className="mt-4 text-teal-50 text-lg">Skrining otomatis SDQ, PHQ-9, dan GHQ-12 dengan hasil dan rekomendasi instan untuk setiap anggota keluarga.</p>
+              <div className="mt-6 flex gap-3 flex-wrap">
+                <Button className="bg-white text-teal-700 hover:bg-teal-50" onClick={() => onLogin('register')}>Mulai Sekarang</Button>
+                <Button variant="outline" className="border-white text-white hover:bg-white/10 bg-transparent" onClick={() => onLogin('login')}>Masuk</Button>
+              </div>
+            </div>
+          </section>
+
+          <section className="container py-14">
+            <div className="mb-6"><h2 className="text-2xl font-bold text-slate-800">Artikel &amp; Edukasi</h2><p className="text-slate-500">Wawasan seputar kesehatan mental untuk keluarga.</p></div>
+            {articles.length === 0 ? <p className="text-slate-400">Belum ada artikel.</p> : (
+              <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+                {articles.map(a => (
+                  <Card key={a.id} className="overflow-hidden hover:shadow-lg transition cursor-pointer group" onClick={() => open(a)}>
+                    {a.coverImage && <div className="h-44 overflow-hidden"><img src={a.coverImage} alt={a.title} className="w-full h-full object-cover group-hover:scale-105 transition" /></div>}
+                    <CardContent className="py-4">
+                      <div className="text-xs text-slate-400 mb-1">{new Date(a.createdAt).toLocaleDateString('id-ID')} • {a.author}</div>
+                      <h3 className="font-bold text-slate-800 mb-1 line-clamp-2">{a.title}</h3>
+                      <p className="text-sm text-slate-500 line-clamp-3">{a.excerpt}</p>
+                      <span className="text-teal-600 text-sm font-medium mt-2 inline-block">Baca selengkapnya →</span>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <footer className="bg-slate-900 text-slate-300 py-10 mt-6">
+            <div className="container flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2"><Brain className="h-5 w-5 text-teal-400" /><span className="font-bold text-white">PHD</span> — Psychological Health Detection</div>
+              <div className="text-sm">Jika dalam keadaan darurat, hubungi Hotline SEJIWA/Kemenkes: <b className="text-white">119 ext 8</b></div>
+            </div>
+          </footer>
+        </>
+      )}
+    </div>
+  )
+}
+
+function ArticleDetail({ article, onBack, onLogin }) {
+  return (
+    <article className="container py-8 max-w-3xl">
+      <Button variant="ghost" size="sm" onClick={onBack} className="mb-4"><ArrowLeft className="h-4 w-4 mr-1" /> Kembali ke Beranda</Button>
+      {article.coverImage && <img src={article.coverImage} alt={article.title} className="w-full h-64 object-cover rounded-xl mb-6" />}
+      <div className="text-sm text-slate-400 mb-2">{new Date(article.createdAt).toLocaleDateString('id-ID')} • {article.author}</div>
+      <h1 className="text-3xl font-bold text-slate-800 mb-5">{article.title}</h1>
+      <div className="article-content text-slate-700 leading-relaxed space-y-3" dangerouslySetInnerHTML={{ __html: article.content }} />
+      <div className="mt-10 rounded-xl bg-teal-50 border border-teal-100 p-6 text-center">
+        <h3 className="font-bold text-teal-800 text-lg">Ingin melakukan skrining kesehatan mental?</h3>
+        <p className="text-teal-700 text-sm mt-1 mb-4">Buat akun gratis dan mulai asesmen untuk keluarga Anda.</p>
+        <Button className="bg-teal-600 hover:bg-teal-700" onClick={() => onLogin('register')}>Mulai Asesmen</Button>
+      </div>
+    </article>
+  )
+}
+
+function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading, onBack }) {
   const [screen, setScreen] = useState('auth') // auth | forgot | reset
   const [fUser, setFUser] = useState('')
   const [demoToken, setDemoToken] = useState('')
@@ -242,7 +329,8 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
           <Feature icon={<ShieldAlert className="h-5 w-5" />} title="Deteksi Risiko" desc="Peringatan dini untuk kondisi berisiko tinggi" />
         </div>
       </div>
-      <div className="flex-1 flex items-center justify-center p-6">
+      <div className="flex-1 flex flex-col items-center justify-center p-6">
+        {onBack && <button onClick={onBack} className="self-start mb-4 text-sm text-slate-500 hover:text-teal-600 flex items-center gap-1"><ArrowLeft className="h-4 w-4" /> Kembali ke Beranda</button>}
         <Card className="w-full max-w-md">
           {screen === 'auth' && (<>
             <CardHeader><CardTitle className="text-2xl">{authMode === 'login' ? 'Masuk' : 'Buat Akun'}</CardTitle><CardDescription>Kelola asesmen kesehatan mental keluarga Anda</CardDescription></CardHeader>
@@ -602,7 +690,7 @@ function AdminPanel({ user, token, logout }) {
         <div className="container flex items-center justify-between py-4">
           <div className="flex items-center gap-2">
             <div className="bg-teal-500/20 rounded-lg p-2"><ShieldCheck className="h-6 w-6 text-teal-400" /></div>
-            <div><div className="font-bold text-lg leading-none">PHD Admin</div><div className="text-xs text-slate-300">Psychological Health Detection</div></div>
+            <div><div className="font-bold text-lg leading-none">PHD Admin</div><div className="text-xs text-slate-300">Psychological Health Detector</div></div>
           </div>
           <div className="flex items-center gap-3">
             <div className="text-right hidden sm:block"><div className="text-sm font-medium">{user.name}</div><Badge className="bg-teal-500/20 text-teal-300 border-0 text-[10px]">{ROLE_LABEL[user.role] || user.role}</Badge></div>
@@ -619,6 +707,7 @@ function AdminPanel({ user, token, logout }) {
             <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>
             <TabsTrigger value="users"><UserCog className="h-4 w-4 mr-1" /> Manajemen User</TabsTrigger>
             <TabsTrigger value="rujukan"><BookUser className="h-4 w-4 mr-1" /> Rujukan</TabsTrigger>
+            <TabsTrigger value="artikel"><FileText className="h-4 w-4 mr-1" /> Artikel</TabsTrigger>
             <TabsTrigger value="feedback"><MessageSquare className="h-4 w-4 mr-1" /> Feedback</TabsTrigger>
             <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>
           </TabsList>
@@ -628,6 +717,7 @@ function AdminPanel({ user, token, logout }) {
           <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>
           <TabsContent value="users"><AdminUsers aapi={aapi} /></TabsContent>
           <TabsContent value="rujukan"><AdminReferrals aapi={aapi} /></TabsContent>
+          <TabsContent value="artikel"><AdminArticles aapi={aapi} /></TabsContent>
           <TabsContent value="feedback"><AdminFeedback aapi={aapi} /></TabsContent>
           <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>
         </Tabs>
@@ -977,6 +1067,76 @@ function AdminFeedback({ aapi }) {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function AdminArticles({ aapi }) {
+  const [list, setList] = useState([])
+  const [edit, setEdit] = useState(null)
+  const load = () => aapi('/admin/articles').then(setList).catch(e => toast.error(e.message))
+  useEffect(() => { load() }, [])
+  function openNew() { setEdit({ title: '', excerpt: '', coverImage: '', content: '', status: 'draft' }) }
+  function insert(snippet) { setEdit(prev => ({ ...prev, content: (prev.content || '') + snippet })) }
+  function addImage() { const url = prompt('Masukkan URL gambar:'); if (url) insert(`\n<img src="${url}" style="width:100%;border-radius:12px;margin:12px 0" />\n`) }
+  function addVideo() { const url = prompt('Masukkan URL YouTube atau video (mis. https://www.youtube.com/watch?v=XXXX):'); if (url) { const embed = url.includes('watch?v=') ? url.replace('watch?v=', 'embed/').split('&')[0] : (url.includes('youtu.be/') ? url.replace('youtu.be/', 'www.youtube.com/embed/') : url); insert(`\n<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;margin:12px 0"><iframe src="${embed}" style="position:absolute;top:0;left:0;width:100%;height:100%" frameborder="0" allowfullscreen></iframe></div>\n`) } }
+  async function save(e) {
+    e.preventDefault()
+    if (!edit.title || !edit.content) { toast.error('Judul dan konten wajib diisi'); return }
+    try {
+      if (edit.id) await aapi(`/admin/articles/${edit.id}`, { method: 'PUT', body: edit })
+      else await aapi('/admin/articles', { method: 'POST', body: edit })
+      toast.success('Artikel disimpan'); setEdit(null); load()
+    } catch (e) { toast.error(e.message) }
+  }
+  async function del(id) { if (!confirm('Hapus artikel ini?')) return; try { await aapi(`/admin/articles/${id}`, { method: 'DELETE' }); toast.success('Artikel dihapus'); load() } catch (e) { toast.error(e.message) } }
+
+  if (edit) return (
+    <div className="max-w-4xl">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-slate-800">{edit.id ? 'Ubah Artikel' : 'Artikel Baru'}</h3>
+        <div className="flex gap-2"><Button variant="outline" size="sm" onClick={() => setEdit(null)}>Batal</Button><Button size="sm" className="bg-teal-600 hover:bg-teal-700" onClick={save}><Save className="h-4 w-4 mr-1" /> Simpan</Button></div>
+      </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="space-y-3">
+          <div><Label>Judul</Label><Input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} /></div>
+          <div><Label>URL Gambar Sampul</Label><Input value={edit.coverImage} onChange={e => setEdit({ ...edit, coverImage: e.target.value })} placeholder="https://..." /></div>
+          <div><Label>Ringkasan (excerpt)</Label><Textarea rows={2} value={edit.excerpt} onChange={e => setEdit({ ...edit, excerpt: e.target.value })} /></div>
+          <div>
+            <div className="flex items-center justify-between mb-1"><Label>Konten (HTML)</Label><div className="flex gap-1"><Button type="button" size="sm" variant="outline" onClick={addImage}><Plus className="h-3 w-3 mr-1" />Gambar</Button><Button type="button" size="sm" variant="outline" onClick={addVideo}><Plus className="h-3 w-3 mr-1" />Video</Button></div></div>
+            <Textarea rows={12} value={edit.content} onChange={e => setEdit({ ...edit, content: e.target.value })} className="font-mono text-xs" placeholder="Tulis konten. Gunakan tombol Gambar/Video untuk menyisipkan media." />
+          </div>
+          <div><Label>Status</Label><Select value={edit.status} onValueChange={v => setEdit({ ...edit, status: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="published">Publikasikan</SelectItem></SelectContent></Select></div>
+        </div>
+        <div>
+          <Label className="mb-1 block">Pratinjau</Label>
+          <div className="border rounded-lg p-4 h-[520px] overflow-auto bg-white">
+            {edit.coverImage && <img src={edit.coverImage} alt="cover" className="w-full h-40 object-cover rounded-lg mb-3" />}
+            <h2 className="text-xl font-bold text-slate-800 mb-2">{edit.title || '(Tanpa Judul)'}</h2>
+            <div className="article-content text-slate-700 text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: edit.content || '<p class="text-slate-400">Konten pratinjau akan muncul di sini...</p>' }} />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><FileText className="h-5 w-5 text-teal-600" /> Manajemen Artikel</h3>
+        <Button className="bg-teal-600 hover:bg-teal-700" size="sm" onClick={openNew}><Plus className="h-4 w-4 mr-1" /> Artikel Baru</Button>
+      </div>
+      <Card><CardContent className="p-0"><Table>
+        <TableHeader><TableRow><TableHead>Judul</TableHead><TableHead>Penulis</TableHead><TableHead className="text-center">Status</TableHead><TableHead>Tanggal</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+        <TableBody>{list.length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center text-slate-400 py-8">Belum ada artikel.</TableCell></TableRow>) : list.map(a => (
+          <TableRow key={a.id}>
+            <TableCell className="font-medium max-w-xs"><div className="line-clamp-1">{a.title}</div></TableCell>
+            <TableCell className="text-sm text-slate-500">{a.author}</TableCell>
+            <TableCell className="text-center"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${a.status === 'published' ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>{a.status === 'published' ? 'Terbit' : 'Draft'}</span></TableCell>
+            <TableCell className="text-sm">{new Date(a.createdAt).toLocaleDateString('id-ID')}</TableCell>
+            <TableCell className="text-right space-x-1"><Button size="sm" variant="outline" onClick={() => setEdit({ ...a })}><Pencil className="h-3.5 w-3.5" /></Button><button onClick={() => del(a.id)} className="text-slate-400 hover:text-red-600 align-middle"><Trash2 className="h-4 w-4 inline" /></button></TableCell>
+          </TableRow>))}</TableBody>
+      </Table></CardContent></Card>
     </div>
   )
 }

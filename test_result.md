@@ -385,3 +385,74 @@ backend_feedback:
 agent_communication:
     -agent: "testing"
     -message: "🎉 UPDATE 4 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 2 major features with 35+ individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ USERNAME AUTH: Register/login/forgot-password all use username (not email). Response objects contain 'username' field (NOT email). Admin login with username 'admin' returns super_admin role. Duplicate username returns 400, missing username returns 400, wrong password returns 401. Forgot/reset password flow working with username. GET /auth/me returns user with username. ✅ FEEDBACK: User can POST feedback with message/rating/category, returns feedback with status='Baru' and username field. Empty message returns 400. GET /feedback returns only user's feedback. Admin can GET all feedback, PATCH to update status/reply, DELETE feedback. Normal user gets 403 on admin endpoints (RBAC enforced). Admin stats includes newFeedback count. Alerts have 'username' field (not userEmail). NO ISSUES FOUND. Both features working correctly with proper status codes, error messages in Indonesian, data validation, and authorization checks. Backend is production-ready."
+
+## ---- UPDATE 5: PUBLIC ARTICLES + ADMIN ARTICLE CMS ----
+agent_communication:
+    -agent: "main"
+    -message: "Articles feature. PUBLIC (no auth): GET /api/articles -> only published, list omits full 'content' (has excerpt/coverImage/title); GET /api/articles/:idOrSlug -> full published article incl content (404 if not found or draft). ADMIN (token admin/admin123): GET /api/admin/articles -> ALL incl drafts; POST /api/admin/articles {title,excerpt,coverImage,content,status} (missing title/content -> 400) -> returns with id & slug; PUT /api/admin/articles/:id (e.g., set status 'published') -> persists & appears in public GET; DELETE /api/admin/articles/:id. RBAC: normal user token -> 403 on /admin/articles. Verify a draft created via admin is NOT visible on public GET /api/articles until status set to published."
+
+
+backend_articles:
+  - task: "Public Articles endpoints (GET /articles, GET /articles/:idOrSlug)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Public endpoints: GET /articles returns only published articles with content field omitted (list has title/excerpt/coverImage/author/createdAt). GET /articles/:idOrSlug returns full article including content (HTML). Returns 404 for non-existent or draft articles."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL PUBLIC ARTICLE TESTS PASSED (100% SUCCESS). Comprehensive testing with 4 test scenarios. PUBLIC ENDPOINTS FULLY WORKING: (1) GET /articles returns 3 seeded published articles (200). CRITICAL: List correctly OMITS 'content' field - only includes id, title, excerpt, coverImage, author, createdAt, status. All articles have status='published'. (2) GET /articles/:id returns full article WITH content field (HTML, 509 chars). Content is properly formatted HTML string. (3) GET /articles/:slug works correctly (slug-based access) - tested with slug 'kapan-harus-ke-psikolog-8vacc', returns 200 with full article including content. (4) GET /articles/nonexistent-id-999 correctly returns 404. All status codes correct, content field handling perfect (omitted in list, included in detail)."
+
+  - task: "Admin Articles CMS (GET/POST/PUT/DELETE /admin/articles)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Admin endpoints: GET /admin/articles returns ALL articles (drafts + published). POST /admin/articles creates article with auto-generated id & slug, returns with status & author. PUT /admin/articles/:id updates article (e.g., publish draft). DELETE /admin/articles/:id removes article. Validation: missing title/content returns 400."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL ADMIN ARTICLE CMS TESTS PASSED (100% SUCCESS). Comprehensive testing with 9 test scenarios. ADMIN ENDPOINTS FULLY WORKING: (1) Admin login with username 'admin' password 'admin123' returns token with role='super_admin' (200). (2) GET /admin/articles returns ALL articles including drafts (200, count=3 initially all published). (3) POST /admin/articles with {title:'Draft Uji', excerpt:'x', coverImage:'', content:'<p>isi</p>', status:'draft'} successfully creates draft article (200). Response includes id='86257893-94f6-4c48-93e2-4d66cb44345d', slug='draft-uji-znc60', status='draft', author='Super Admin'. (4) POST /admin/articles with missing title returns 400. (5) POST /admin/articles with missing content returns 400. (6) POST /admin/articles with empty title and content returns 400. (7) PUT /admin/articles/:id with {status:'published'} successfully publishes draft (200, status changed to 'published'). (8) DELETE /admin/articles/:id successfully removes article (200, ok=true). (9) Deleted article no longer appears in any lists. All CRUD operations working perfectly with proper validation and status codes."
+
+  - task: "Draft visibility control (drafts hidden from public endpoints)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Draft articles should NOT be visible on public GET /articles. Public GET /articles/:draftId should return 404. After publishing (status='published'), article should appear in public endpoints."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL DRAFT VISIBILITY TESTS PASSED (100% SUCCESS). Comprehensive testing with 5 test scenarios covering full draft lifecycle. DRAFT VISIBILITY CONTROL WORKING PERFECTLY: (1) Created draft article 'Draft Uji' with status='draft' via admin endpoint. (2) GET /articles (public, no auth) correctly returns only 3 published articles - draft NOT in list. (3) GET /articles/:draftId (public, no auth) correctly returns 404 - draft completely hidden from public. (4) After PUT /admin/articles/:id with {status:'published'}, draft becomes published. (5) GET /articles (public) now includes the published article (count=4). List still correctly OMITS 'content' field. (6) GET /articles/:id (public) now returns 200 with full content (53 chars). (7) After DELETE /admin/articles/:id, article no longer in public list (count=3). Status transitions working correctly: draft (hidden) -> published (visible) -> deleted (removed). Draft visibility control is 100% accurate."
+
+  - task: "Articles RBAC (normal user gets 403 on /admin/articles)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Normal users (role='user') should get 403 on all /admin/articles endpoints. Only admin roles (super_admin, admin_medis, admin_teknis) can access."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL ARTICLES RBAC TESTS PASSED (100% SUCCESS). Tested 2 scenarios with normal user token. RBAC CORRECTLY ENFORCED: (1) Registered normal user 'user_1786371164' with role='user'. (2) GET /admin/articles with normal user token correctly returns 403 'Akses ditolak (bukan admin)'. (3) POST /admin/articles with normal user token correctly returns 403 'Akses ditolak (bukan admin)'. Authorization checks working perfectly - only admin roles can access /admin/articles endpoints."
+
+agent_communication:
+    -agent: "testing"
+    -message: "🎉 ARTICLES FEATURE BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 4 major categories with 16 individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ PUBLIC ENDPOINTS: GET /articles returns only published articles (3 seeded). List correctly OMITS 'content' field (only title, excerpt, coverImage, author, createdAt). GET /articles/:id returns full article WITH content (HTML). GET /articles/:slug works (slug-based access). GET /articles/nonexistent returns 404. ✅ ADMIN CMS: Admin login with username 'admin' password 'admin123' works. GET /admin/articles returns ALL articles (includes drafts). POST /admin/articles creates draft with id, slug, status='draft', author='Super Admin'. POST validation: missing title/content returns 400. PUT /admin/articles/:id publishes draft (status='published'). DELETE /admin/articles/:id removes article. ✅ DRAFT VISIBILITY: Draft NOT visible in public GET /articles. Public GET /articles/:draftId returns 404 (draft hidden). After publish, article appears in public list and detail accessible. After delete, article removed from all lists. Status transitions working correctly (draft -> published -> deleted). ✅ RBAC: Normal user gets 403 on GET /admin/articles and POST /admin/articles. NO ISSUES FOUND. All endpoints working correctly with proper status codes, content field handling (omitted in list, included in detail), draft visibility control, and authorization checks. Backend is production-ready."
