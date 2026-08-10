@@ -194,7 +194,9 @@ function defaultAgeRules() {
 async function ensureSeed(db) {
   const admin = await db.collection('users').findOne({ role: 'super_admin' })
   if (!admin) {
-    await db.collection('users').insertOne({ id: uuidv4(), name: 'Super Admin', email: 'admin@siap.id', passwordHash: hashPassword('admin123'), role: 'super_admin', status: 'active', createdAt: new Date() })
+    await db.collection('users').insertOne({ id: uuidv4(), name: 'Super Admin', username: 'admin', passwordHash: hashPassword('admin123'), role: 'super_admin', status: 'active', createdAt: new Date() })
+  } else if (!admin.username) {
+    await db.collection('users').updateOne({ id: admin.id }, { $set: { username: 'admin' } })
   }
   const instCount = await db.collection('instruments').countDocuments()
   if (instCount === 0) await db.collection('instruments').insertMany(defaultInstruments())
@@ -320,22 +322,22 @@ async function handleRoute(request, { params }) {
 
     // ---------- AUTH ----------
     if (route === '/auth/register' && method === 'POST') {
-      const { name, email, password } = await request.json()
-      if (!name || !email || !password) return handleCORS(NextResponse.json({ error: 'Nama, email, dan password wajib diisi' }, { status: 400 }))
-      const existing = await db.collection('users').findOne({ email: email.toLowerCase() })
-      if (existing) return handleCORS(NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 400 }))
-      const user = { id: uuidv4(), name, email: email.toLowerCase(), passwordHash: hashPassword(password), role: 'user', status: 'active', createdAt: new Date() }
-      await db.collection('users').insertOne(user)
-      const token = signToken({ id: user.id, role: user.role })
-      return handleCORS(NextResponse.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } }))
+      const { name, username, password } = await request.json()
+      if (!name || !username || !password) return handleCORS(NextResponse.json({ error: 'Nama, username, dan password wajib diisi' }, { status: 400 }))
+      const existing = await db.collection('users').findOne({ username: username.toLowerCase() })
+      if (existing) return handleCORS(NextResponse.json({ error: 'Username sudah digunakan' }, { status: 400 }))
+      const u = { id: uuidv4(), name, username: username.toLowerCase(), passwordHash: hashPassword(password), role: 'user', status: 'active', createdAt: new Date() }
+      await db.collection('users').insertOne(u)
+      const token = signToken({ id: u.id, role: u.role })
+      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role } }))
     }
     if (route === '/auth/login' && method === 'POST') {
-      const { email, password } = await request.json()
-      const user = await db.collection('users').findOne({ email: (email || '').toLowerCase() })
-      if (!user || !verifyPassword(password, user.passwordHash)) return handleCORS(NextResponse.json({ error: 'Email atau password salah' }, { status: 401 }))
-      if (user.status === 'suspended') return handleCORS(NextResponse.json({ error: 'Akun Anda ditangguhkan' }, { status: 403 }))
-      const token = signToken({ id: user.id, role: user.role })
-      return handleCORS(NextResponse.json({ token, user: { id: user.id, name: user.name, email: user.email, role: user.role } }))
+      const { username, password } = await request.json()
+      const u = await db.collection('users').findOne({ username: (username || '').toLowerCase() })
+      if (!u || !verifyPassword(password, u.passwordHash)) return handleCORS(NextResponse.json({ error: 'Username atau password salah' }, { status: 401 }))
+      if (u.status === 'suspended') return handleCORS(NextResponse.json({ error: 'Akun Anda ditangguhkan' }, { status: 403 }))
+      const token = signToken({ id: u.id, role: u.role })
+      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role } }))
     }
     if (route === '/auth/me' && method === 'GET') {
       const user = await getUserFromRequest(request, db)
@@ -344,12 +346,12 @@ async function handleRoute(request, { params }) {
     }
 
     if (route === '/auth/forgot-password' && method === 'POST') {
-      const { email } = await request.json()
-      const u = await db.collection('users').findOne({ email: (email || '').toLowerCase() })
-      if (!u) return handleCORS(NextResponse.json({ error: 'Email tidak terdaftar' }, { status: 404 }))
+      const { username } = await request.json()
+      const u = await db.collection('users').findOne({ username: (username || '').toLowerCase() })
+      if (!u) return handleCORS(NextResponse.json({ error: 'Username tidak terdaftar' }, { status: 404 }))
       const token = crypto.randomBytes(24).toString('hex')
-      await db.collection('password_resets').insertOne({ token, userId: u.id, email: u.email, expiresAt: Date.now() + 60 * 60 * 1000, createdAt: new Date() })
-      // NOTE: Pengiriman email di-MOCK untuk mode demo — token dikembalikan langsung.
+      await db.collection('password_resets').insertOne({ token, userId: u.id, expiresAt: Date.now() + 60 * 60 * 1000, createdAt: new Date() })
+      // NOTE: Pengiriman notifikasi di-MOCK untuk mode demo — token dikembalikan langsung.
       return handleCORS(NextResponse.json({ ok: true, demo: true, token }))
     }
     if (route === '/auth/reset-password' && method === 'POST') {
@@ -419,11 +421,11 @@ async function handleRoute(request, { params }) {
       const inst = await getInstrument(db, instrumentCode)
       if (!inst) return handleCORS(NextResponse.json({ error: 'Kuesioner tidak valid' }, { status: 400 }))
       const result = computeScore(inst, answers)
-      const assessment = { id: uuidv4(), userId: user.id, userEmail: user.email, memberId, memberName: member.fullName, memberAge: age, memberGender: member.gender, instrumentCode, instrumentName: inst.name, family: inst.family, answers, result, createdAt: new Date() }
+      const assessment = { id: uuidv4(), userId: user.id, username: user.username, memberId, memberName: member.fullName, memberAge: age, memberGender: member.gender, instrumentCode, instrumentName: inst.name, family: inst.family, answers, result, createdAt: new Date() }
       await db.collection('assessments').insertOne(assessment)
       if (result.redFlag) {
         const { type, severity } = alertTypeFor(result)
-        await db.collection('alerts').insertOne({ id: uuidv4(), assessmentId: assessment.id, userId: user.id, userEmail: user.email, memberName: member.fullName, memberAge: age, instrumentCode, instrumentName: inst.name, type, severity, category: result.overallCategory, status: 'New', createdAt: new Date() })
+        await db.collection('alerts').insertOne({ id: uuidv4(), assessmentId: assessment.id, userId: user.id, username: user.username, memberName: member.fullName, memberAge: age, instrumentCode, instrumentName: inst.name, type, severity, category: result.overallCategory, status: 'New', createdAt: new Date() })
       }
       const { _id, ...clean } = assessment
       return handleCORS(NextResponse.json(clean))
@@ -450,6 +452,24 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(list.map(({ _id, ...r }) => r)))
     }
 
+    // ---------- FEEDBACK (user) ----------
+    if (route === '/feedback' && method === 'POST') {
+      const user = await getUserFromRequest(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const { message, rating, category } = await request.json()
+      if (!message || !message.trim()) return handleCORS(NextResponse.json({ error: 'Pesan feedback wajib diisi' }, { status: 400 }))
+      const fb = { id: uuidv4(), userId: user.id, username: user.username, name: user.name, message: message.trim(), rating: rating || null, category: category || 'Umum', status: 'Baru', reply: '', createdAt: new Date() }
+      await db.collection('feedback').insertOne(fb)
+      const { _id, ...clean } = fb
+      return handleCORS(NextResponse.json(clean))
+    }
+    if (route === '/feedback' && method === 'GET') {
+      const user = await getUserFromRequest(request, db)
+      if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
+      const list = await db.collection('feedback').find({ userId: user.id }).sort({ createdAt: -1 }).toArray()
+      return handleCORS(NextResponse.json(list.map(({ _id, ...f }) => f)))
+    }
+
     // =================== ADMIN ===================
     if (route.startsWith('/admin/')) {
       const user = await getUserFromRequest(request, db)
@@ -468,7 +488,8 @@ async function handleRoute(request, { params }) {
         alerts.forEach(a => { if (a.status in alertStatus) alertStatus[a.status]++ })
         const totalUsers = await db.collection('users').countDocuments({ role: 'user' })
         const totalMembers = await db.collection('members').countDocuments()
-        return handleCORS(NextResponse.json({ total, distribution: dist, trend, alertStatus, newAlerts: alertStatus['New'], totalUsers, totalMembers }))
+        const newFeedback = await db.collection('feedback').countDocuments({ status: 'Baru' })
+        return handleCORS(NextResponse.json({ total, distribution: dist, trend, alertStatus, newAlerts: alertStatus['New'], totalUsers, totalMembers, newFeedback }))
       }
 
       if (route === '/admin/alerts' && method === 'GET') {
@@ -581,6 +602,28 @@ async function handleRoute(request, { params }) {
         const u = await db.collection('users').findOne({ id })
         const { _id, passwordHash, ...safe } = u
         return handleCORS(NextResponse.json(safe))
+      }
+
+      // ---- Feedback management ----
+      if (route === '/admin/feedback' && method === 'GET') {
+        const list = await db.collection('feedback').find({}).sort({ createdAt: -1 }).toArray()
+        return handleCORS(NextResponse.json(list.map(({ _id, ...f }) => f)))
+      }
+      if (route.startsWith('/admin/feedback/') && method === 'PATCH') {
+        const id = path[2]; const { status, reply } = await request.json()
+        const upd = { updatedAt: new Date() }
+        if (status) upd.status = status
+        if (reply !== undefined) upd.reply = reply
+        await db.collection('feedback').updateOne({ id }, { $set: upd })
+        await audit(db, user, 'Kelola Feedback', `Feedback ${id} -> ${status || 'balasan diperbarui'}`)
+        const f = await db.collection('feedback').findOne({ id })
+        if (!f) return handleCORS(NextResponse.json({ error: 'Tidak ditemukan' }, { status: 404 }))
+        const { _id, ...clean } = f
+        return handleCORS(NextResponse.json(clean))
+      }
+      if (route.startsWith('/admin/feedback/') && method === 'DELETE') {
+        await db.collection('feedback').deleteOne({ id: path[2] })
+        return handleCORS(NextResponse.json({ ok: true }))
       }
     }
 

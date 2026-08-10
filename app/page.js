@@ -17,7 +17,7 @@ import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser } from 'lucide-react'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star } from 'lucide-react'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
 const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
@@ -66,10 +66,11 @@ export default function App() {
   const [history, setHistory] = useState([])
   const [referrals, setReferrals] = useState([])
   const [emergencyOpen, setEmergencyOpen] = useState(false)
+  const [feedbackOpen, setFeedbackOpen] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const [authMode, setAuthMode] = useState('login')
-  const [af, setAf] = useState({ name: '', email: '', password: '' })
+  const [af, setAf] = useState({ name: '', username: '', password: '' })
 
   const [memberDialog, setMemberDialog] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
@@ -90,7 +91,7 @@ export default function App() {
     setLoading(true)
     try {
       const path = authMode === 'login' ? '/auth/login' : '/auth/register'
-      const body = authMode === 'login' ? { email: af.email, password: af.password } : af
+      const body = authMode === 'login' ? { username: af.username, password: af.password } : af
       const d = await api(path, { method: 'POST', body })
       localStorage.setItem('siap_token', d.token)
       setToken(d.token); setUser(d.user)
@@ -189,7 +190,8 @@ export default function App() {
             </div>
           </button>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block"><div className="text-sm font-medium">{user.name}</div><div className="text-xs text-teal-50">{user.email}</div></div>
+            <div className="text-right hidden sm:block"><div className="text-sm font-medium">{user.name}</div><div className="text-xs text-teal-50">@{user.username}</div></div>
+            <Button variant="secondary" size="sm" onClick={() => setFeedbackOpen(true)}><MessageSquare className="h-4 w-4 mr-1" /> Feedback</Button>
             <Button variant="secondary" size="sm" onClick={logout}><LogOut className="h-4 w-4 mr-1" /> Keluar</Button>
           </div>
         </div>
@@ -205,13 +207,14 @@ export default function App() {
 
       <MemberDialog {...{ memberDialog, setMemberDialog, mf, setMf, saveMember, editingMember }} />
       <EmergencyDialog {...{ emergencyOpen, setEmergencyOpen, referrals }} />
+      <FeedbackDialog open={feedbackOpen} onClose={() => setFeedbackOpen(false)} token={token} />
     </div>
   )
 }
 
 function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
   const [screen, setScreen] = useState('auth') // auth | forgot | reset
-  const [fEmail, setFEmail] = useState('')
+  const [fUser, setFUser] = useState('')
   const [demoToken, setDemoToken] = useState('')
   const [rToken, setRToken] = useState('')
   const [rPass, setRPass] = useState('')
@@ -219,7 +222,7 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
 
   async function sendForgot(e) {
     e.preventDefault(); setBusy(true)
-    try { const d = await api('/auth/forgot-password', { method: 'POST', body: { email: fEmail } }); setDemoToken(d.token); setRToken(d.token); toast.success('Tautan reset dibuat') } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+    try { const d = await api('/auth/forgot-password', { method: 'POST', body: { username: fUser } }); setDemoToken(d.token); setRToken(d.token); toast.success('Tautan reset dibuat') } catch (e) { toast.error(e.message) } finally { setBusy(false) }
   }
   async function doReset(e) {
     e.preventDefault(); setBusy(true)
@@ -249,20 +252,20 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading }) {
               </Tabs>
               <form onSubmit={handleAuth} className="space-y-4">
                 {authMode === 'register' && (<div><Label>Nama Lengkap</Label><Input value={af.name} onChange={e => setAf({ ...af, name: e.target.value })} placeholder="Nama Anda" required /></div>)}
-                <div><Label>Email</Label><Input type="email" value={af.email} onChange={e => setAf({ ...af, email: e.target.value })} placeholder="email@contoh.com" required /></div>
+                <div><Label>Username</Label><Input value={af.username} onChange={e => setAf({ ...af, username: e.target.value })} placeholder="username_anda" required /></div>
                 <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
                 <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
                 {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
               </form>
-              {authMode === 'login' && <button onClick={() => { setScreen('forgot'); setFEmail(af.email) }} className="mt-3 text-sm text-teal-600 hover:underline w-full text-center">Lupa password?</button>}
+              {authMode === 'login' && <button onClick={() => { setScreen('forgot'); setFUser(af.username) }} className="mt-3 text-sm text-teal-600 hover:underline w-full text-center">Lupa password?</button>}
             </CardContent>
           </>)}
 
           {screen === 'forgot' && (<>
-            <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><KeyRound className="h-6 w-6 text-teal-600" /> Lupa Password</CardTitle><CardDescription>Masukkan email akun Anda untuk mendapatkan tautan reset.</CardDescription></CardHeader>
+            <CardHeader><CardTitle className="text-2xl flex items-center gap-2"><KeyRound className="h-6 w-6 text-teal-600" /> Lupa Password</CardTitle><CardDescription>Masukkan username akun Anda untuk mendapatkan tautan reset.</CardDescription></CardHeader>
             <CardContent>
               <form onSubmit={sendForgot} className="space-y-4">
-                <div><Label>Email</Label><Input type="email" value={fEmail} onChange={e => setFEmail(e.target.value)} placeholder="email@contoh.com" required /></div>
+                <div><Label>Username</Label><Input value={fUser} onChange={e => setFUser(e.target.value)} placeholder="username_anda" required /></div>
                 <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={busy}>{busy ? 'Memproses...' : 'Kirim Tautan Reset'}</Button>
               </form>
               {demoToken && (
@@ -546,6 +549,43 @@ function EmergencyDialog({ emergencyOpen, setEmergencyOpen, referrals }) {
   )
 }
 
+function FeedbackDialog({ open, onClose, token }) {
+  const [message, setMessage] = useState('')
+  const [rating, setRating] = useState(0)
+  const [category, setCategory] = useState('Umum')
+  const [list, setList] = useState([])
+  const [busy, setBusy] = useState(false)
+  const load = () => api('/feedback', { token }).then(setList).catch(() => {})
+  useEffect(() => { if (open) load() }, [open])
+  async function submit(e) {
+    e.preventDefault()
+    if (!message.trim()) { toast.error('Pesan wajib diisi'); return }
+    setBusy(true)
+    try { await api('/feedback', { method: 'POST', token, body: { message, rating: rating || null, category } }); toast.success('Terima kasih atas feedback Anda'); setMessage(''); setRating(0); load() } catch (e) { toast.error(e.message) } finally { setBusy(false) }
+  }
+  return (
+    <Dialog open={open} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader><DialogTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-teal-600" /> Kirim Feedback</DialogTitle><DialogDescription>Masukan Anda membantu kami meningkatkan layanan.</DialogDescription></DialogHeader>
+        <form onSubmit={submit} className="space-y-3">
+          <div><Label>Kategori</Label><Select value={category} onValueChange={setCategory}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['Umum', 'Saran Fitur', 'Laporan Bug', 'Keluhan', 'Pujian'].map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent></Select></div>
+          <div><Label>Rating</Label><div className="flex gap-1 mt-1">{[1, 2, 3, 4, 5].map(n => <button type="button" key={n} onClick={() => setRating(n)}><Star className={`h-6 w-6 ${n <= rating ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`} /></button>)}</div></div>
+          <div><Label>Pesan</Label><Textarea value={message} onChange={e => setMessage(e.target.value)} rows={3} placeholder="Tulis masukan Anda..." /></div>
+          <Button type="submit" disabled={busy} className="w-full bg-teal-600 hover:bg-teal-700">{busy ? 'Mengirim...' : 'Kirim Feedback'}</Button>
+        </form>
+        {list.length > 0 && (<div className="mt-2 max-h-52 overflow-auto space-y-2 border-t pt-3">
+          <div className="text-sm font-semibold text-slate-600">Riwayat Feedback Anda</div>
+          {list.map(f => (<div key={f.id} className="rounded border p-2 text-sm">
+            <div className="flex justify-between items-center"><span className="text-xs text-slate-400">{f.category} • {new Date(f.createdAt).toLocaleDateString('id-ID')}</span><Badge variant="outline" className="text-[10px]">{f.status}</Badge></div>
+            <p className="text-slate-700">{f.message}</p>
+            {f.reply && <div className="mt-1 rounded bg-teal-50 p-2 text-teal-800 text-xs"><b>Balasan Admin:</b> {f.reply}</div>}
+          </div>))}
+        </div>)}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ==================== ADMIN PANEL ====================
 const ROLE_LABEL = { super_admin: 'Super Admin', admin_medis: 'Admin Medis / Psikolog', admin_teknis: 'Admin Teknis' }
 const SEV_CLS = { Kritis: 'bg-red-600 text-white', Tinggi: 'bg-red-100 text-red-700 border-red-200', Sedang: 'bg-amber-100 text-amber-700 border-amber-200' }
@@ -579,6 +619,7 @@ function AdminPanel({ user, token, logout }) {
             <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>
             <TabsTrigger value="users"><UserCog className="h-4 w-4 mr-1" /> Manajemen User</TabsTrigger>
             <TabsTrigger value="rujukan"><BookUser className="h-4 w-4 mr-1" /> Rujukan</TabsTrigger>
+            <TabsTrigger value="feedback"><MessageSquare className="h-4 w-4 mr-1" /> Feedback</TabsTrigger>
             <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>
           </TabsList>
           <TabsContent value="dashboard"><AdminDashboard aapi={aapi} /></TabsContent>
@@ -587,6 +628,7 @@ function AdminPanel({ user, token, logout }) {
           <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>
           <TabsContent value="users"><AdminUsers aapi={aapi} /></TabsContent>
           <TabsContent value="rujukan"><AdminReferrals aapi={aapi} /></TabsContent>
+          <TabsContent value="feedback"><AdminFeedback aapi={aapi} /></TabsContent>
           <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>
         </Tabs>
       </div>
@@ -664,7 +706,7 @@ function AdminAlerts({ aapi }) {
             {alerts.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">Tidak ada alert.</TableCell></TableRow>) : alerts.map(a => (
               <TableRow key={a.id} className={a.status === 'New' ? 'bg-red-50/40' : ''}>
                 <TableCell className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString('id-ID')}</TableCell>
-                <TableCell className="text-sm font-medium">{a.memberName}<div className="text-xs text-slate-400">{a.memberAge} th • {a.userEmail}</div></TableCell>
+                <TableCell className="text-sm font-medium">{a.memberName}<div className="text-xs text-slate-400">{a.memberAge} th • @{a.username}</div></TableCell>
                 <TableCell className="text-sm">{a.instrumentName}</TableCell>
                 <TableCell className="text-sm">{a.type}</TableCell>
                 <TableCell className="text-center"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${SEV_CLS[a.severity] || 'bg-slate-100'}`}>{a.severity}</span></TableCell>
@@ -680,7 +722,7 @@ function AdminAlerts({ aapi }) {
           <DialogHeader><DialogTitle>Detail Alert</DialogTitle></DialogHeader>
           {detail && (<div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-slate-500">Pasien</span><span className="font-medium">{detail.memberName} ({detail.memberAge} th)</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Kontak User</span><span>{detail.userEmail}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Username</span><span>@{detail.username}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Instrumen</span><span>{detail.instrumentName}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Tipe</span><span className="font-medium text-red-600">{detail.type}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Kategori Hasil</span><CatBadge cat={detail.category} /></div>
@@ -824,11 +866,11 @@ function AdminUsers({ aapi }) {
     <div>
       <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><UserCog className="h-5 w-5 text-teal-600" /> Manajemen User</h3>
       <Card><CardContent className="p-0"><Table>
-        <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Email</TableHead><TableHead className="text-center">Anggota</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Username</TableHead><TableHead className="text-center">Anggota</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
         <TableBody>{users.length === 0 ? (<TableRow><TableCell colSpan={6} className="text-center text-slate-400 py-8">Belum ada user terdaftar.</TableCell></TableRow>) : users.map(u => (
           <TableRow key={u.id} className={u.status === 'suspended' ? 'bg-red-50/40' : ''}>
             <TableCell className="font-medium">{u.name}</TableCell>
-            <TableCell className="text-sm text-slate-500">{u.email}</TableCell>
+            <TableCell className="text-sm text-slate-500">@{u.username}</TableCell>
             <TableCell className="text-center">{u.memberCount}</TableCell>
             <TableCell className="text-center">{u.assessmentCount}</TableCell>
             <TableCell className="text-center"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{u.status === 'suspended' ? 'Ditangguhkan' : 'Aktif'}</span></TableCell>
@@ -842,7 +884,7 @@ function AdminUsers({ aapi }) {
       </Table></CardContent></Card>
       <Dialog open={!!resetTarget} onOpenChange={o => { if (!o) { setResetTarget(null); setNewPass('') } }}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Reset Password</DialogTitle><DialogDescription>{resetTarget?.email}</DialogDescription></DialogHeader>
+          <DialogHeader><DialogTitle>Reset Password</DialogTitle><DialogDescription>@{resetTarget?.username}</DialogDescription></DialogHeader>
           <form onSubmit={doReset} className="space-y-4">
             <div><Label>Password Baru</Label><Input type="text" value={newPass} onChange={e => setNewPass(e.target.value)} placeholder="Min. 4 karakter" required /></div>
             <DialogFooter><Button type="submit" className="bg-teal-600 hover:bg-teal-700">Simpan Password</Button></DialogFooter>
@@ -893,6 +935,48 @@ function AdminReferrals({ aapi }) {
           ))}
         </div>
       </div>
+    </div>
+  )
+}
+
+const FB_STATUS = ['Baru', 'Dibaca', 'Ditanggapi', 'Selesai']
+const FB_STATUS_CLS = { Baru: 'bg-red-100 text-red-700', Dibaca: 'bg-amber-100 text-amber-700', Ditanggapi: 'bg-blue-100 text-blue-700', Selesai: 'bg-emerald-100 text-emerald-700' }
+function AdminFeedback({ aapi }) {
+  const [list, setList] = useState([])
+  const [sel, setSel] = useState(null)
+  const [reply, setReply] = useState('')
+  const load = () => aapi('/admin/feedback').then(setList).catch(e => toast.error(e.message))
+  useEffect(() => { load() }, [])
+  async function changeStatus(f, status) { try { await aapi(`/admin/feedback/${f.id}`, { method: 'PATCH', body: { status } }); load() } catch (e) { toast.error(e.message) } }
+  function openReply(f) { setSel(f); setReply(f.reply || '') }
+  async function saveReply(e) { e.preventDefault(); try { await aapi(`/admin/feedback/${sel.id}`, { method: 'PATCH', body: { reply, status: 'Ditanggapi' } }); toast.success('Balasan terkirim'); setSel(null); setReply(''); load() } catch (e) { toast.error(e.message) } }
+  async function del(id) { if (!confirm('Hapus feedback ini?')) return; try { await aapi(`/admin/feedback/${id}`, { method: 'DELETE' }); toast.success('Feedback dihapus'); load() } catch (e) { toast.error(e.message) } }
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><MessageSquare className="h-5 w-5 text-teal-600" /> Manajemen Feedback User</h3>
+      <Card><CardContent className="p-0"><Table>
+        <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>User</TableHead><TableHead>Kategori</TableHead><TableHead>Pesan</TableHead><TableHead className="text-center">Rating</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+        <TableBody>{list.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">Belum ada feedback.</TableCell></TableRow>) : list.map(f => (
+          <TableRow key={f.id} className={f.status === 'Baru' ? 'bg-red-50/40' : ''}>
+            <TableCell className="text-xs whitespace-nowrap">{new Date(f.createdAt).toLocaleDateString('id-ID')}</TableCell>
+            <TableCell className="text-sm">{f.name}<div className="text-xs text-slate-400">@{f.username}</div></TableCell>
+            <TableCell className="text-sm">{f.category}</TableCell>
+            <TableCell className="text-sm max-w-xs"><div className="line-clamp-2">{f.message}</div>{f.reply && <div className="text-xs text-teal-600 mt-1">✓ dibalas</div>}</TableCell>
+            <TableCell className="text-center text-sm">{f.rating ? `${f.rating}★` : '-'}</TableCell>
+            <TableCell><Select value={f.status} onValueChange={v => changeStatus(f, v)}><SelectTrigger className={`w-32 h-8 text-xs ${FB_STATUS_CLS[f.status]}`}><SelectValue /></SelectTrigger><SelectContent>{FB_STATUS.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></TableCell>
+            <TableCell className="text-right space-x-1"><Button size="sm" variant="outline" onClick={() => openReply(f)}>Balas</Button><button onClick={() => del(f.id)} className="text-slate-400 hover:text-red-600 align-middle"><Trash2 className="h-4 w-4 inline" /></button></TableCell>
+          </TableRow>))}</TableBody>
+      </Table></CardContent></Card>
+      <Dialog open={!!sel} onOpenChange={o => { if (!o) { setSel(null); setReply('') } }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Balas Feedback</DialogTitle><DialogDescription>{sel && `Dari @${sel.username} • ${sel.category}`}</DialogDescription></DialogHeader>
+          {sel && <div className="rounded bg-slate-50 p-3 text-sm text-slate-700 mb-2">{sel.message}</div>}
+          <form onSubmit={saveReply} className="space-y-3">
+            <div><Label>Balasan</Label><Textarea value={reply} onChange={e => setReply(e.target.value)} rows={3} placeholder="Tulis balasan untuk user..." required /></div>
+            <DialogFooter><Button type="submit" className="bg-teal-600 hover:bg-teal-700">Kirim Balasan</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

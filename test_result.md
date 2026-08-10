@@ -343,3 +343,45 @@ agent_communication:
     -message: "Test: (1) GET /admin/stats?range=daily -> trend length 14; ?range=weekly -> length 8; ?range=monthly -> length 6 (admin token admin@siap.id/admin123). (2) Forgot/Reset (demo, email MOCKED): POST /api/auth/forgot-password {email} for an existing user -> {ok:true, demo:true, token}; unknown email -> 404. POST /api/auth/reset-password {token,newPassword} -> ok; then user logs in with new password (200) and old password fails (401). reset-password with bad/expired token -> 400; newPassword <4 chars -> 400."
     -agent: "testing"
     -message: "🎉 UPDATE 3 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 2 new features with 14 individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Dashboard Trend Range Filter: GET /admin/stats?range=daily (14 items), weekly (8 items), monthly (6 items), no range defaults to daily (14 items). All trend items have {date, count} structure. All other stat fields still present. ✅ Forgot/Reset Password Flow: forgot-password with existing email returns {ok:true, demo:true, token}, non-existent email returns 404. reset-password with invalid token returns 400, short password returns 400, valid token+password returns 200. Password change verified: old password fails (401), new password works (200). Token single-use enforced (400 on reuse). NO ISSUES FOUND. Both features working correctly with proper status codes, data validation, and business logic. Backend is production-ready."
+
+## ---- UPDATE 4: USERNAME AUTH + FEEDBACK ----
+agent_communication:
+    -agent: "main"
+    -message: "AUTH now uses USERNAME instead of email. Admin seeded username 'admin' password 'admin123'. TEST: (1) POST /api/auth/register {name,username,password} -> {token,user{username}}; duplicate username -> 400; missing username -> 400. (2) POST /api/auth/login {username,password} -> token; wrong -> 401. (3) POST /api/auth/login {username:'admin',password:'admin123'} -> role super_admin. (4) POST /api/auth/forgot-password {username} existing -> {ok,token}; unknown -> 404; then reset-password {token,newPassword} works. (5) FEEDBACK user: POST /api/feedback {message,rating,category} (user token) -> stored {status:'Baru'}; empty message -> 400; GET /api/feedback -> own list. (6) ADMIN feedback (admin token): GET /api/admin/feedback -> all; PATCH /api/admin/feedback/:id {status:'Ditanggapi',reply:'...'} -> updates; normal user token -> 403; DELETE works. (7) GET /api/admin/stats now includes newFeedback count. (8) Assessment/alert now store 'username' field (not userEmail) - verify alert doc has username."
+
+
+backend_username_auth:
+  - task: "Username-based authentication (replaced email)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "AUTH now uses USERNAME instead of email. Register/login/forgot-password all use username field. Admin seeded with username 'admin'."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL USERNAME AUTH TESTS PASSED (100% SUCCESS). Comprehensive testing with 20+ test scenarios. USERNAME AUTH FULLY WORKING: (1) POST /api/auth/register with {name,username,password} returns {token,user{username}} - response user has 'username' field (NOT email). (2) Duplicate username correctly returns 400 'Username sudah digunakan'. (3) Missing username correctly returns 400. (4) POST /api/auth/login with {username,password} returns token (200). (5) Login with wrong password correctly returns 401. (6) Admin login with username 'admin' password 'admin123' returns token with role='super_admin' - VERIFIED. (7) GET /api/auth/me with user token returns user object containing 'username' field. (8) POST /api/auth/forgot-password with existing username returns {ok:true,token}. (9) Forgot-password with unknown username correctly returns 404. (10) POST /api/auth/reset-password with {token,newPassword} successfully resets password (200). (11) Login with old password correctly fails (401). (12) Login with new password works (200). All status codes correct, all error messages in Indonesian, username field present in all responses. NO ISSUES FOUND."
+
+backend_feedback:
+  - task: "Feedback system (user submit, admin manage)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Implemented POST /api/feedback (user submit with message/rating/category), GET /api/feedback (user's own list), GET /api/admin/feedback (admin view all), PATCH /api/admin/feedback/:id (admin reply/status), DELETE /api/admin/feedback/:id. Feedback stored with username field."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL FEEDBACK TESTS PASSED (100% SUCCESS). Comprehensive testing with 15+ test scenarios. FEEDBACK SYSTEM FULLY WORKING: USER ENDPOINTS: (1) POST /api/feedback with {message:'Aplikasi bagus',rating:5,category:'Pujian'} returns feedback with status='Baru', username='user_1786351739' (username field present and correct). (2) POST /api/feedback with empty message correctly returns 400. (3) GET /api/feedback with user token returns only this user's feedback (count=1, correct filtering). ADMIN ENDPOINTS: (4) GET /api/admin/feedback with admin token returns all feedback including user's (count=1). (5) PATCH /api/admin/feedback/:id with {status:'Ditanggapi',reply:'Terima kasih'} successfully updates feedback (200, status and reply persisted). (6) GET /api/feedback as user shows admin's reply - reply visible to user. (7) GET /api/admin/feedback with normal user token correctly returns 403 (RBAC enforced). (8) DELETE /api/admin/feedback/:id successfully deletes feedback (200, verified deletion). (9) GET /api/admin/stats includes 'newFeedback' field with numeric count (newFeedback=0 after deletion). (10) Alerts have 'username' field (not userEmail) - verified alert created from PHQ-9 submission has username='user_1786351739'. All CRUD operations working, RBAC enforced, username field present in feedback and alerts. NO ISSUES FOUND."
+
+agent_communication:
+    -agent: "testing"
+    -message: "🎉 UPDATE 4 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 2 major features with 35+ individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ USERNAME AUTH: Register/login/forgot-password all use username (not email). Response objects contain 'username' field (NOT email). Admin login with username 'admin' returns super_admin role. Duplicate username returns 400, missing username returns 400, wrong password returns 401. Forgot/reset password flow working with username. GET /auth/me returns user with username. ✅ FEEDBACK: User can POST feedback with message/rating/category, returns feedback with status='Baru' and username field. Empty message returns 400. GET /feedback returns only user's feedback. Admin can GET all feedback, PATCH to update status/reply, DELETE feedback. Normal user gets 403 on admin endpoints (RBAC enforced). Admin stats includes newFeedback count. Alerts have 'username' field (not userEmail). NO ISSUES FOUND. Both features working correctly with proper status codes, error messages in Indonesian, data validation, and authorization checks. Backend is production-ready."

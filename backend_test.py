@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backend Test Suite for SIAP Admin Panel
-Tests admin RBAC, dashboard stats, alerts management, instruments config, age rules, and audit logs
+Backend Test Suite for USERNAME AUTH + FEEDBACK Feature
+Tests username-based authentication (replaced email) and new feedback system
 """
 import requests
 import json
@@ -13,575 +13,564 @@ BASE_URL = "https://mental-health-hub-234.preview.emergentagent.com/api"
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
-def test_setup_normal_user():
-    """Setup: Register a normal user and add members with specific ages"""
+def test_username_auth_register():
+    """Test registration with username (not email)"""
     log("=" * 80)
-    log("SETUP: Creating normal user and members")
+    log("TEST 1: USERNAME AUTH - REGISTER")
     log("=" * 80)
     
-    # Register normal user with unique email
     timestamp = int(time.time())
-    email = f"testuser{timestamp}@example.com"
+    username = f"user_{timestamp}"
     
-    log(f"1. Registering normal user: {email}")
+    # Test 1: Register with username
+    log(f"1.1. Register with username: {username}")
     resp = requests.post(f"{BASE_URL}/auth/register", json={
         "name": "Test User",
-        "email": email,
-        "password": "testpass123"
+        "username": username,
+        "password": "pass1234"
     })
-    assert resp.status_code == 200, f"Register failed: {resp.status_code} {resp.text}"
-    data = resp.json()
-    assert "token" in data, "No token in response"
-    assert data["user"]["role"] == "user", f"Expected role 'user', got {data['user']['role']}"
     
-    user_token = data["token"]
-    user_id = data["user"]["id"]
-    log(f"✅ Normal user registered: {email}, role={data['user']['role']}")
-    
-    # Add 3 members with specific ages
-    headers = {"Authorization": f"Bearer {user_token}"}
-    
-    log("2. Adding member age ~5 (dob: 2020-01-01)")
-    resp = requests.post(f"{BASE_URL}/members", headers=headers, json={
-        "fullName": "Anak Lima Tahun",
-        "gender": "Laki-laki",
-        "dob": "2020-01-01",
-        "relationship": "Anak"
-    })
-    assert resp.status_code == 200, f"Add member failed: {resp.text}"
-    member_5 = resp.json()
-    assert member_5["age"] in [4, 5, 6], f"Expected age ~5, got {member_5['age']}"
-    assert member_5["instruments"] == [{"code": "sdq_parent", "name": "SDQ - Laporan Orang Tua/Guru"}], \
-        f"Expected sdq_parent only, got {member_5['instruments']}"
-    log(f"✅ Member age {member_5['age']} added, instruments: {[i['code'] for i in member_5['instruments']]}")
-    
-    log("3. Adding member age ~14 (dob: 2011-01-01)")
-    resp = requests.post(f"{BASE_URL}/members", headers=headers, json={
-        "fullName": "Remaja Empat Belas",
-        "gender": "Perempuan",
-        "dob": "2011-01-01",
-        "relationship": "Anak"
-    })
-    assert resp.status_code == 200, f"Add member failed: {resp.text}"
-    member_14 = resp.json()
-    assert member_14["age"] in [13, 14, 15], f"Expected age ~14, got {member_14['age']}"
-    assert member_14["instruments"] == [{"code": "sdq_self", "name": "SDQ - Laporan Diri (Remaja)"}], \
-        f"Expected sdq_self only, got {member_14['instruments']}"
-    log(f"✅ Member age {member_14['age']} added, instruments: {[i['code'] for i in member_14['instruments']]}")
-    
-    log("4. Adding member age ~30 (dob: 1995-01-01)")
-    resp = requests.post(f"{BASE_URL}/members", headers=headers, json={
-        "fullName": "Dewasa Tiga Puluh",
-        "gender": "Laki-laki",
-        "dob": "1995-01-01",
-        "relationship": "Diri Sendiri"
-    })
-    assert resp.status_code == 200, f"Add member failed: {resp.text}"
-    member_30 = resp.json()
-    assert member_30["age"] in [29, 30, 31], f"Expected age ~30, got {member_30['age']}"
-    expected_instruments = [
-        {"code": "phq9", "name": "PHQ-9 (Skrining Depresi)"},
-        {"code": "ghq12", "name": "GHQ-12 (Kesehatan Mental Umum)"}
-    ]
-    assert member_30["instruments"] == expected_instruments, \
-        f"Expected phq9+ghq12, got {member_30['instruments']}"
-    log(f"✅ Member age {member_30['age']} added, instruments: {[i['code'] for i in member_30['instruments']]}")
-    
-    return {
-        "user_token": user_token,
-        "user_id": user_id,
-        "email": email,
-        "member_5": member_5,
-        "member_14": member_14,
-        "member_30": member_30
-    }
+    try:
+        assert resp.status_code == 200, f"❌ Register failed: {resp.status_code} {resp.text}"
+        data = resp.json()
+        assert "token" in data, "❌ No token in response"
+        assert "user" in data, "❌ No user in response"
+        assert "username" in data["user"], "❌ Response user missing 'username' field"
+        assert "email" not in data["user"], "❌ Response should NOT have 'email' field (replaced by username)"
+        assert data["user"]["username"] == username, f"❌ Expected username '{username}', got '{data['user']['username']}'"
+        assert data["user"]["role"] == "user", f"❌ Expected role 'user', got '{data['user']['role']}'"
+        
+        user_token = data["token"]
+        user_username = data["user"]["username"]
+        user_id = data["user"]["id"]
+        
+        log(f"✅ PASS: Register with username returns token and user with username field")
+        log(f"   username={user_username}, role={data['user']['role']}")
+        
+        # Test 2: Duplicate username should return 400
+        log(f"1.2. Register with same username again -> expect 400")
+        resp2 = requests.post(f"{BASE_URL}/auth/register", json={
+            "name": "Another User",
+            "username": username,
+            "password": "different123"
+        })
+        assert resp2.status_code == 400, f"❌ Expected 400 for duplicate username, got {resp2.status_code}"
+        error_msg = resp2.json().get("error", "").lower()
+        assert "username" in error_msg and "digunakan" in error_msg, \
+            f"❌ Expected 'Username sudah digunakan' error, got: {resp2.json().get('error')}"
+        log(f"✅ PASS: Duplicate username returns 400 with 'Username sudah digunakan'")
+        
+        # Test 3: Missing username should return 400
+        log(f"1.3. Register without username -> expect 400")
+        resp3 = requests.post(f"{BASE_URL}/auth/register", json={
+            "name": "No Username User",
+            "password": "pass1234"
+        })
+        assert resp3.status_code == 400, f"❌ Expected 400 for missing username, got {resp3.status_code}"
+        log(f"✅ PASS: Missing username returns 400")
+        
+        return {
+            "user_token": user_token,
+            "username": user_username,
+            "password": "pass1234",
+            "user_id": user_id
+        }
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_submit_assessments(setup_data):
-    """Submit assessments to create alerts for testing"""
+def test_username_auth_login(user_data):
+    """Test login with username"""
     log("=" * 80)
-    log("SETUP: Submitting assessments to create alerts")
+    log("TEST 2: USERNAME AUTH - LOGIN")
     log("=" * 80)
     
-    headers = {"Authorization": f"Bearer {setup_data['user_token']}"}
-    member_30_id = setup_data["member_30"]["id"]
-    member_5_id = setup_data["member_5"]["id"]
-    
-    # 1. PHQ-9 with suicide risk (item 9 = 2, all others = 0)
-    log("1. Submitting PHQ-9 with suicide risk (item9=2, others=0)")
-    answers = {str(i): 0 for i in range(1, 10)}
-    answers["9"] = 2
-    resp = requests.post(f"{BASE_URL}/assessments", headers=headers, json={
-        "memberId": member_30_id,
-        "instrumentCode": "phq9",
-        "answers": answers
-    })
-    assert resp.status_code == 200, f"Assessment failed: {resp.text}"
-    result = resp.json()
-    assert result["result"]["suicideRisk"] == True, f"Expected suicideRisk=true, got {result['result']['suicideRisk']}"
-    assert result["result"]["redFlag"] == True, f"Expected redFlag=true, got {result['result']['redFlag']}"
-    assert result["result"]["total"] == 2, f"Expected total=2, got {result['result']['total']}"
-    log(f"✅ PHQ-9 suicide risk: total={result['result']['total']}, suicideRisk={result['result']['suicideRisk']}, redFlag={result['result']['redFlag']}")
-    
-    # 2. PHQ-9 severe (all answers = 3)
-    log("2. Submitting PHQ-9 severe (all answers=3)")
-    answers = {str(i): 3 for i in range(1, 10)}
-    resp = requests.post(f"{BASE_URL}/assessments", headers=headers, json={
-        "memberId": member_30_id,
-        "instrumentCode": "phq9",
-        "answers": answers
-    })
-    assert resp.status_code == 200, f"Assessment failed: {resp.text}"
-    result = resp.json()
-    assert result["result"]["total"] == 27, f"Expected total=27, got {result['result']['total']}"
-    assert result["result"]["severity"] == "Berat", f"Expected severity='Berat', got {result['result']['severity']}"
-    assert result["result"]["redFlag"] == True, f"Expected redFlag=true, got {result['result']['redFlag']}"
-    log(f"✅ PHQ-9 severe: total={result['result']['total']}, severity={result['result']['severity']}, redFlag={result['result']['redFlag']}")
-    
-    # 3. GHQ-12 high distress (all answers = 2)
-    log("3. Submitting GHQ-12 high distress (all answers=2)")
-    answers = {str(i): 2 for i in range(1, 13)}
-    resp = requests.post(f"{BASE_URL}/assessments", headers=headers, json={
-        "memberId": member_30_id,
-        "instrumentCode": "ghq12",
-        "answers": answers
-    })
-    assert resp.status_code == 200, f"Assessment failed: {resp.text}"
-    result = resp.json()
-    assert result["result"]["total"] == 24, f"Expected total=24, got {result['result']['total']}"
-    assert result["result"]["overallCategory"] == "Indikasi Masalah Psikologis", \
-        f"Expected 'Indikasi Masalah Psikologis', got {result['result']['overallCategory']}"
-    assert result["result"]["redFlag"] == True, f"Expected redFlag=true, got {result['result']['redFlag']}"
-    log(f"✅ GHQ-12 high: total={result['result']['total']}, category={result['result']['overallCategory']}, redFlag={result['result']['redFlag']}")
-    
-    # 4. SDQ for child (REGRESSION CHECK - all answers = 0)
-    log("4. Submitting SDQ (sdq_parent) REGRESSION CHECK (all answers=0)")
-    answers = {str(i): 0 for i in range(1, 26)}
-    resp = requests.post(f"{BASE_URL}/assessments", headers=headers, json={
-        "memberId": member_5_id,
-        "instrumentCode": "sdq_parent",
-        "answers": answers
-    })
-    assert resp.status_code == 200, f"Assessment failed: {resp.text}"
-    result = resp.json()
-    
-    # CRITICAL REGRESSION CHECK: Verify exact subscale scores
-    expected_subscales = {"E": 0, "C": 2, "H": 4, "P": 4, "Pr": 0}
-    actual_subscales = result["result"]["subscales"]
-    assert actual_subscales == expected_subscales, \
-        f"REGRESSION FAIL: Expected subscales {expected_subscales}, got {actual_subscales}"
-    assert result["result"]["totalDifficulties"] == 10, \
-        f"REGRESSION FAIL: Expected totalDifficulties=10, got {result['result']['totalDifficulties']}"
-    
-    log(f"✅ SDQ REGRESSION PASSED: E={actual_subscales['E']}, C={actual_subscales['C']}, H={actual_subscales['H']}, P={actual_subscales['P']}, Pr={actual_subscales['Pr']}, Total={result['result']['totalDifficulties']}")
-    log("   Reversed scoring (items 7,11,14,21,25) working correctly after refactor!")
-    
-    return True
+    try:
+        # Test 1: Login with correct username and password
+        log(f"2.1. Login with username '{user_data['username']}' and correct password")
+        resp = requests.post(f"{BASE_URL}/auth/login", json={
+            "username": user_data["username"],
+            "password": user_data["password"]
+        })
+        assert resp.status_code == 200, f"❌ Login failed: {resp.status_code} {resp.text}"
+        data = resp.json()
+        assert "token" in data, "❌ No token in response"
+        log(f"✅ PASS: Login with username returns token")
+        
+        # Test 2: Login with wrong password
+        log(f"2.2. Login with wrong password -> expect 401")
+        resp2 = requests.post(f"{BASE_URL}/auth/login", json={
+            "username": user_data["username"],
+            "password": "wrongpassword"
+        })
+        assert resp2.status_code == 401, f"❌ Expected 401 for wrong password, got {resp2.status_code}"
+        log(f"✅ PASS: Wrong password returns 401")
+        
+        # Test 3: Login as admin with username 'admin'
+        log(f"2.3. Login with username 'admin' password 'admin123' -> expect super_admin role")
+        resp3 = requests.post(f"{BASE_URL}/auth/login", json={
+            "username": "admin",
+            "password": "admin123"
+        })
+        assert resp3.status_code == 200, f"❌ Admin login failed: {resp3.status_code} {resp3.text}"
+        admin_data = resp3.json()
+        assert "token" in admin_data, "❌ No token in admin response"
+        assert admin_data["user"]["role"] == "super_admin", \
+            f"❌ Expected role 'super_admin', got '{admin_data['user']['role']}'"
+        assert admin_data["user"]["username"] == "admin", \
+            f"❌ Expected username 'admin', got '{admin_data['user']['username']}'"
+        
+        admin_token = admin_data["token"]
+        log(f"✅ PASS: Admin login with username 'admin' returns super_admin role")
+        
+        return admin_token
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_admin_auth():
-    """Test admin authentication"""
+def test_username_auth_me(user_data):
+    """Test GET /auth/me returns user with username"""
     log("=" * 80)
-    log("TEST: Admin Authentication")
+    log("TEST 3: USERNAME AUTH - GET /auth/me")
     log("=" * 80)
     
-    log("1. Login as admin@siap.id with password admin123")
-    resp = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": "admin@siap.id",
-        "password": "admin123"
-    })
-    assert resp.status_code == 200, f"Admin login failed: {resp.status_code} {resp.text}"
-    data = resp.json()
-    assert "token" in data, "No token in response"
-    assert data["user"]["role"] == "super_admin", f"Expected role 'super_admin', got {data['user']['role']}"
-    
-    admin_token = data["token"]
-    log(f"✅ Admin login successful: email={data['user']['email']}, role={data['user']['role']}")
-    
-    return admin_token
+    try:
+        log(f"3.1. GET /auth/me with user token")
+        headers = {"Authorization": f"Bearer {user_data['user_token']}"}
+        resp = requests.get(f"{BASE_URL}/auth/me", headers=headers)
+        assert resp.status_code == 200, f"❌ GET /auth/me failed: {resp.status_code} {resp.text}"
+        data = resp.json()
+        assert "user" in data, "❌ No user in response"
+        assert "username" in data["user"], "❌ User object missing 'username' field"
+        assert data["user"]["username"] == user_data["username"], \
+            f"❌ Expected username '{user_data['username']}', got '{data['user']['username']}'"
+        log(f"✅ PASS: GET /auth/me returns user with username field: {data['user']['username']}")
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_rbac(setup_data, admin_token):
-    """Test RBAC: normal user should get 403, no token should get 401"""
+def test_username_forgot_reset_password(user_data):
+    """Test forgot/reset password with username"""
     log("=" * 80)
-    log("TEST: RBAC (Role-Based Access Control)")
+    log("TEST 4: USERNAME AUTH - FORGOT/RESET PASSWORD")
     log("=" * 80)
     
-    # Test 1: Normal user token should get 403
-    log("1. Testing normal user token on /admin/stats -> expect 403")
-    headers = {"Authorization": f"Bearer {setup_data['user_token']}"}
-    resp = requests.get(f"{BASE_URL}/admin/stats", headers=headers)
-    assert resp.status_code == 403, f"Expected 403 for normal user, got {resp.status_code}"
-    assert "ditolak" in resp.json().get("error", "").lower() or "forbidden" in resp.json().get("error", "").lower(), \
-        f"Expected access denied error, got {resp.json()}"
-    log(f"✅ Normal user correctly denied: {resp.status_code} {resp.json()['error']}")
-    
-    # Test 2: No token should get 401
-    log("2. Testing no token on /admin/stats -> expect 401")
-    resp = requests.get(f"{BASE_URL}/admin/stats")
-    assert resp.status_code == 401, f"Expected 401 without token, got {resp.status_code}"
-    log(f"✅ No token correctly denied: {resp.status_code} {resp.json()['error']}")
-    
-    # Test 3: Admin token should work
-    log("3. Testing admin token on /admin/stats -> expect 200")
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    resp = requests.get(f"{BASE_URL}/admin/stats", headers=headers)
-    assert resp.status_code == 200, f"Expected 200 for admin, got {resp.status_code} {resp.text}"
-    log(f"✅ Admin token works: {resp.status_code}")
-    
-    return True
+    try:
+        # Test 1: Forgot password with existing username
+        log(f"4.1. POST /auth/forgot-password with username '{user_data['username']}'")
+        resp = requests.post(f"{BASE_URL}/auth/forgot-password", json={
+            "username": user_data["username"]
+        })
+        assert resp.status_code == 200, f"❌ Forgot password failed: {resp.status_code} {resp.text}"
+        data = resp.json()
+        assert data.get("ok") == True, "❌ Expected ok=true"
+        assert "token" in data, "❌ No token in response"
+        assert data["token"] != "", "❌ Token is empty"
+        
+        reset_token = data["token"]
+        log(f"✅ PASS: Forgot password with username returns token: {reset_token[:20]}...")
+        
+        # Test 2: Forgot password with unknown username
+        log(f"4.2. POST /auth/forgot-password with unknown username -> expect 404")
+        resp2 = requests.post(f"{BASE_URL}/auth/forgot-password", json={
+            "username": "unknownuser999999"
+        })
+        assert resp2.status_code == 404, f"❌ Expected 404 for unknown username, got {resp2.status_code}"
+        log(f"✅ PASS: Unknown username returns 404")
+        
+        # Test 3: Reset password with token
+        log(f"4.3. POST /auth/reset-password with token and new password")
+        new_password = "newpass1"
+        resp3 = requests.post(f"{BASE_URL}/auth/reset-password", json={
+            "token": reset_token,
+            "newPassword": new_password
+        })
+        assert resp3.status_code == 200, f"❌ Reset password failed: {resp3.status_code} {resp3.text}"
+        assert resp3.json().get("ok") == True, "❌ Expected ok=true"
+        log(f"✅ PASS: Reset password successful")
+        
+        # Test 4: Login with old password should fail
+        log(f"4.4. Login with old password -> expect 401")
+        resp4 = requests.post(f"{BASE_URL}/auth/login", json={
+            "username": user_data["username"],
+            "password": user_data["password"]
+        })
+        assert resp4.status_code == 401, f"❌ Expected 401 for old password, got {resp4.status_code}"
+        log(f"✅ PASS: Old password no longer works (401)")
+        
+        # Test 5: Login with new password should work
+        log(f"4.5. Login with new password -> expect 200")
+        resp5 = requests.post(f"{BASE_URL}/auth/login", json={
+            "username": user_data["username"],
+            "password": new_password
+        })
+        assert resp5.status_code == 200, f"❌ Login with new password failed: {resp5.status_code} {resp5.text}"
+        log(f"✅ PASS: New password works (200)")
+        
+        # Update user_data with new password and token
+        user_data["password"] = new_password
+        user_data["user_token"] = resp5.json()["token"]
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_admin_stats(admin_token):
-    """Test GET /admin/stats"""
+def test_feedback_user(user_data):
+    """Test feedback endpoints for normal user"""
     log("=" * 80)
-    log("TEST: GET /admin/stats")
+    log("TEST 5: FEEDBACK - USER ENDPOINTS")
     log("=" * 80)
     
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    resp = requests.get(f"{BASE_URL}/admin/stats", headers=headers)
-    assert resp.status_code == 200, f"Stats failed: {resp.status_code} {resp.text}"
-    
-    data = resp.json()
-    
-    # Verify structure
-    required_fields = ["total", "distribution", "trend", "alertStatus", "newAlerts", "totalUsers", "totalMembers"]
-    for field in required_fields:
-        assert field in data, f"Missing field: {field}"
-    
-    # Verify distribution has correct keys
-    assert "Normal" in data["distribution"], "Missing 'Normal' in distribution"
-    assert "Ambang" in data["distribution"], "Missing 'Ambang' in distribution"
-    assert "Abnormal" in data["distribution"], "Missing 'Abnormal' in distribution"
-    
-    # Verify trend is array of 14 items
-    assert len(data["trend"]) == 14, f"Expected 14 trend items, got {len(data['trend'])}"
-    assert "date" in data["trend"][0], "Trend items missing 'date'"
-    assert "count" in data["trend"][0], "Trend items missing 'count'"
-    
-    # Verify alertStatus has correct keys
-    assert "New" in data["alertStatus"], "Missing 'New' in alertStatus"
-    assert "Under Review" in data["alertStatus"], "Missing 'Under Review' in alertStatus"
-    assert "Referred" in data["alertStatus"], "Missing 'Referred' in alertStatus"
-    assert "Resolved" in data["alertStatus"], "Missing 'Resolved' in alertStatus"
-    
-    # Verify we have data (from setup)
-    assert data["total"] > 0, f"Expected total > 0, got {data['total']}"
-    assert data["newAlerts"] > 0, f"Expected newAlerts > 0, got {data['newAlerts']}"
-    
-    log(f"✅ Stats endpoint working:")
-    log(f"   - total assessments: {data['total']}")
-    log(f"   - distribution: Normal={data['distribution']['Normal']}, Ambang={data['distribution']['Ambang']}, Abnormal={data['distribution']['Abnormal']}")
-    log(f"   - trend: {len(data['trend'])} days")
-    log(f"   - alertStatus: New={data['alertStatus']['New']}, Under Review={data['alertStatus']['Under Review']}, Referred={data['alertStatus']['Referred']}, Resolved={data['alertStatus']['Resolved']}")
-    log(f"   - newAlerts: {data['newAlerts']}")
-    log(f"   - totalUsers: {data['totalUsers']}")
-    log(f"   - totalMembers: {data['totalMembers']}")
-    
-    return data
+    try:
+        headers = {"Authorization": f"Bearer {user_data['user_token']}"}
+        
+        # First, create a member and submit PHQ-9 with item9=1 to create an alert
+        log(f"5.0. Setup: Create member and submit PHQ-9 with item9=1 (for alert username check)")
+        
+        # Create member
+        resp_member = requests.post(f"{BASE_URL}/members", headers=headers, json={
+            "fullName": "Test Member",
+            "gender": "Laki-laki",
+            "dob": "1995-01-01",
+            "relationship": "Diri Sendiri"
+        })
+        assert resp_member.status_code == 200, f"❌ Create member failed: {resp_member.text}"
+        member = resp_member.json()
+        member_id = member["id"]
+        log(f"   ✅ Member created: {member_id}")
+        
+        # Submit PHQ-9 with item9=1
+        answers = {str(i): 0 for i in range(1, 10)}
+        answers["9"] = 1  # Suicide risk
+        resp_assessment = requests.post(f"{BASE_URL}/assessments", headers=headers, json={
+            "memberId": member_id,
+            "instrumentCode": "phq9",
+            "answers": answers
+        })
+        assert resp_assessment.status_code == 200, f"❌ Submit assessment failed: {resp_assessment.text}"
+        assessment = resp_assessment.json()
+        assert assessment["result"]["suicideRisk"] == True, "❌ Expected suicideRisk=true"
+        log(f"   ✅ PHQ-9 assessment submitted with item9=1 (alert created)")
+        
+        # Test 1: POST feedback with message, rating, category
+        log(f"5.1. POST /feedback with message, rating, category")
+        resp = requests.post(f"{BASE_URL}/feedback", headers=headers, json={
+            "message": "Aplikasi bagus",
+            "rating": 5,
+            "category": "Pujian"
+        })
+        assert resp.status_code == 200, f"❌ POST feedback failed: {resp.status_code} {resp.text}"
+        feedback = resp.json()
+        assert "id" in feedback, "❌ No id in feedback response"
+        assert feedback["message"] == "Aplikasi bagus", f"❌ Expected message 'Aplikasi bagus', got '{feedback['message']}'"
+        assert feedback["rating"] == 5, f"❌ Expected rating 5, got {feedback['rating']}"
+        assert feedback["category"] == "Pujian", f"❌ Expected category 'Pujian', got '{feedback['category']}'"
+        assert feedback["status"] == "Baru", f"❌ Expected status 'Baru', got '{feedback['status']}'"
+        assert "username" in feedback, "❌ Feedback missing 'username' field"
+        assert feedback["username"] == user_data["username"], \
+            f"❌ Expected username '{user_data['username']}', got '{feedback['username']}'"
+        
+        feedback_id = feedback["id"]
+        log(f"✅ PASS: POST feedback returns feedback with status='Baru' and username='{feedback['username']}'")
+        
+        # Test 2: POST feedback with empty message
+        log(f"5.2. POST /feedback with empty message -> expect 400")
+        resp2 = requests.post(f"{BASE_URL}/feedback", headers=headers, json={
+            "message": "",
+            "rating": 3
+        })
+        assert resp2.status_code == 400, f"❌ Expected 400 for empty message, got {resp2.status_code}"
+        log(f"✅ PASS: Empty message returns 400")
+        
+        # Test 3: GET feedback (should return only user's feedback)
+        log(f"5.3. GET /feedback (user token) -> should return only this user's feedback")
+        resp3 = requests.get(f"{BASE_URL}/feedback", headers=headers)
+        assert resp3.status_code == 200, f"❌ GET feedback failed: {resp3.status_code} {resp3.text}"
+        feedbacks = resp3.json()
+        assert isinstance(feedbacks, list), "❌ Expected list of feedbacks"
+        assert len(feedbacks) >= 1, "❌ Expected at least 1 feedback"
+        
+        # Check that the feedback we created is in the list
+        found = False
+        for fb in feedbacks:
+            if fb["id"] == feedback_id:
+                found = True
+                assert fb["userId"] == user_data["user_id"], \
+                    f"❌ Expected userId '{user_data['user_id']}', got '{fb['userId']}'"
+                break
+        assert found, f"❌ Created feedback {feedback_id} not found in user's feedback list"
+        log(f"✅ PASS: GET /feedback returns user's feedback (count={len(feedbacks)})")
+        
+        return feedback_id
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_admin_alerts(admin_token):
-    """Test alert management endpoints"""
+def test_feedback_admin(admin_token, user_data, feedback_id):
+    """Test admin feedback endpoints"""
     log("=" * 80)
-    log("TEST: Alert Management")
+    log("TEST 6: FEEDBACK - ADMIN ENDPOINTS")
     log("=" * 80)
     
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    
-    # 1. GET all alerts
-    log("1. GET /admin/alerts (all)")
-    resp = requests.get(f"{BASE_URL}/admin/alerts", headers=headers)
-    assert resp.status_code == 200, f"Get alerts failed: {resp.status_code} {resp.text}"
-    all_alerts = resp.json()
-    assert isinstance(all_alerts, list), "Expected list of alerts"
-    assert len(all_alerts) > 0, "Expected at least one alert from setup"
-    log(f"✅ Retrieved {len(all_alerts)} alerts")
-    
-    # 2. GET alerts filtered by status=New
-    log("2. GET /admin/alerts?status=New")
-    resp = requests.get(f"{BASE_URL}/admin/alerts?status=New", headers=headers)
-    assert resp.status_code == 200, f"Get filtered alerts failed: {resp.status_code} {resp.text}"
-    new_alerts = resp.json()
-    assert isinstance(new_alerts, list), "Expected list of alerts"
-    for alert in new_alerts:
-        assert alert["status"] == "New", f"Expected status='New', got {alert['status']}"
-    log(f"✅ Retrieved {len(new_alerts)} alerts with status=New")
-    
-    # 3. Get a specific alert for testing status changes
-    test_alert = all_alerts[0]
-    alert_id = test_alert["id"]
-    log(f"3. Testing status transitions on alert {alert_id}")
-    
-    # 4. PATCH alert status: New -> Under Review
-    log("   a. PATCH status to 'Under Review'")
-    resp = requests.patch(f"{BASE_URL}/admin/alerts/{alert_id}", headers=headers, json={
-        "status": "Under Review",
-        "note": "Reviewing case"
-    })
-    assert resp.status_code == 200, f"Patch alert failed: {resp.status_code} {resp.text}"
-    updated = resp.json()
-    assert updated["status"] == "Under Review", f"Expected 'Under Review', got {updated['status']}"
-    log(f"   ✅ Status changed to: {updated['status']}")
-    
-    # 5. PATCH alert status: Under Review -> Referred
-    log("   b. PATCH status to 'Referred'")
-    resp = requests.patch(f"{BASE_URL}/admin/alerts/{alert_id}", headers=headers, json={
-        "status": "Referred",
-        "note": "Referred to specialist"
-    })
-    assert resp.status_code == 200, f"Patch alert failed: {resp.status_code} {resp.text}"
-    updated = resp.json()
-    assert updated["status"] == "Referred", f"Expected 'Referred', got {updated['status']}"
-    log(f"   ✅ Status changed to: {updated['status']}")
-    
-    # 6. PATCH alert status: Referred -> Resolved
-    log("   c. PATCH status to 'Resolved'")
-    resp = requests.patch(f"{BASE_URL}/admin/alerts/{alert_id}", headers=headers, json={
-        "status": "Resolved",
-        "note": "Case resolved"
-    })
-    assert resp.status_code == 200, f"Patch alert failed: {resp.status_code} {resp.text}"
-    updated = resp.json()
-    assert updated["status"] == "Resolved", f"Expected 'Resolved', got {updated['status']}"
-    log(f"   ✅ Status changed to: {updated['status']}")
-    
-    # 7. Test invalid status
-    log("   d. Testing invalid status -> expect 400")
-    resp = requests.patch(f"{BASE_URL}/admin/alerts/{alert_id}", headers=headers, json={
-        "status": "InvalidStatus"
-    })
-    assert resp.status_code == 400, f"Expected 400 for invalid status, got {resp.status_code}"
-    log(f"   ✅ Invalid status correctly rejected: {resp.status_code}")
-    
-    # 8. GET specific alert with nested assessment
-    log(f"4. GET /admin/alerts/{alert_id} (with nested assessment)")
-    resp = requests.get(f"{BASE_URL}/admin/alerts/{alert_id}", headers=headers)
-    assert resp.status_code == 200, f"Get alert detail failed: {resp.status_code} {resp.text}"
-    alert_detail = resp.json()
-    assert "assessment" in alert_detail, "Missing nested assessment"
-    assert alert_detail["assessment"] is not None, "Assessment should not be null"
-    assert "result" in alert_detail["assessment"], "Assessment missing result"
-    assert "recommendations" in alert_detail["assessment"]["result"], "Result missing recommendations"
-    log(f"✅ Alert detail retrieved with nested assessment")
-    log(f"   - instrumentCode: {alert_detail['instrumentCode']}")
-    log(f"   - assessment.result.overallCategory: {alert_detail['assessment']['result']['overallCategory']}")
-    log(f"   - recommendations: {len(alert_detail['assessment']['result']['recommendations'])} items")
-    
-    return alert_id
+    try:
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        user_headers = {"Authorization": f"Bearer {user_data['user_token']}"}
+        
+        # Test 1: GET /admin/feedback (should return all feedback)
+        log(f"6.1. GET /admin/feedback (admin token) -> should return all feedback")
+        resp = requests.get(f"{BASE_URL}/admin/feedback", headers=admin_headers)
+        assert resp.status_code == 200, f"❌ GET admin feedback failed: {resp.status_code} {resp.text}"
+        all_feedbacks = resp.json()
+        assert isinstance(all_feedbacks, list), "❌ Expected list of feedbacks"
+        
+        # Check that user's feedback is in the list
+        found = False
+        for fb in all_feedbacks:
+            if fb["id"] == feedback_id:
+                found = True
+                break
+        assert found, f"❌ User's feedback {feedback_id} not found in admin feedback list"
+        log(f"✅ PASS: GET /admin/feedback returns all feedback including user's (count={len(all_feedbacks)})")
+        
+        # Test 2: PATCH /admin/feedback/:id to update status and reply
+        log(f"6.2. PATCH /admin/feedback/{feedback_id} with status and reply")
+        resp2 = requests.patch(f"{BASE_URL}/admin/feedback/{feedback_id}", headers=admin_headers, json={
+            "status": "Ditanggapi",
+            "reply": "Terima kasih"
+        })
+        assert resp2.status_code == 200, f"❌ PATCH feedback failed: {resp2.status_code} {resp2.text}"
+        updated_feedback = resp2.json()
+        assert updated_feedback["status"] == "Ditanggapi", \
+            f"❌ Expected status 'Ditanggapi', got '{updated_feedback['status']}'"
+        assert updated_feedback["reply"] == "Terima kasih", \
+            f"❌ Expected reply 'Terima kasih', got '{updated_feedback['reply']}'"
+        log(f"✅ PASS: PATCH feedback updates status and reply")
+        
+        # Test 3: GET /feedback as user should show the reply
+        log(f"6.3. GET /feedback as user -> should show reply from admin")
+        resp3 = requests.get(f"{BASE_URL}/feedback", headers=user_headers)
+        assert resp3.status_code == 200, f"❌ GET feedback failed: {resp3.status_code} {resp3.text}"
+        user_feedbacks = resp3.json()
+        found_with_reply = False
+        for fb in user_feedbacks:
+            if fb["id"] == feedback_id:
+                assert fb["reply"] == "Terima kasih", \
+                    f"❌ Expected reply 'Terima kasih', got '{fb['reply']}'"
+                found_with_reply = True
+                break
+        assert found_with_reply, f"❌ Feedback with reply not found"
+        log(f"✅ PASS: User can see admin's reply")
+        
+        # Test 4: Normal user token on GET /admin/feedback should return 403
+        log(f"6.4. GET /admin/feedback with normal user token -> expect 403")
+        resp4 = requests.get(f"{BASE_URL}/admin/feedback", headers=user_headers)
+        assert resp4.status_code == 403, f"❌ Expected 403 for normal user, got {resp4.status_code}"
+        log(f"✅ PASS: Normal user gets 403 on admin feedback endpoint")
+        
+        # Test 5: DELETE /admin/feedback/:id
+        log(f"6.5. DELETE /admin/feedback/{feedback_id} (admin)")
+        resp5 = requests.delete(f"{BASE_URL}/admin/feedback/{feedback_id}", headers=admin_headers)
+        assert resp5.status_code == 200, f"❌ DELETE feedback failed: {resp5.status_code} {resp5.text}"
+        assert resp5.json().get("ok") == True, "❌ Expected ok=true"
+        log(f"✅ PASS: DELETE feedback successful")
+        
+        # Verify deletion
+        resp6 = requests.get(f"{BASE_URL}/admin/feedback", headers=admin_headers)
+        remaining_feedbacks = resp6.json()
+        for fb in remaining_feedbacks:
+            assert fb["id"] != feedback_id, f"❌ Deleted feedback still exists"
+        log(f"✅ PASS: Feedback deleted successfully")
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_admin_instruments(admin_token):
-    """Test instrument configuration endpoints"""
+def test_admin_stats_new_feedback(admin_token):
+    """Test that admin stats includes newFeedback count"""
     log("=" * 80)
-    log("TEST: Instrument Configuration")
+    log("TEST 7: ADMIN STATS - newFeedback COUNT")
     log("=" * 80)
     
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    
-    # 1. GET all instruments
-    log("1. GET /admin/instruments")
-    resp = requests.get(f"{BASE_URL}/admin/instruments", headers=headers)
-    assert resp.status_code == 200, f"Get instruments failed: {resp.status_code} {resp.text}"
-    instruments = resp.json()
-    assert isinstance(instruments, list), "Expected list of instruments"
-    assert len(instruments) == 4, f"Expected 4 instruments, got {len(instruments)}"
-    
-    codes = [i["code"] for i in instruments]
-    expected_codes = ["sdq_parent", "sdq_self", "phq9", "ghq12"]
-    for code in expected_codes:
-        assert code in codes, f"Missing instrument: {code}"
-    log(f"✅ Retrieved {len(instruments)} instruments: {codes}")
-    
-    # 2. GET specific instrument (phq9)
-    log("2. GET /admin/instruments/phq9")
-    resp = requests.get(f"{BASE_URL}/admin/instruments/phq9", headers=headers)
-    assert resp.status_code == 200, f"Get phq9 failed: {resp.status_code} {resp.text}"
-    phq9 = resp.json()
-    
-    # Verify full config
-    assert phq9["code"] == "phq9", f"Expected code 'phq9', got {phq9['code']}"
-    assert "severityBands" in phq9, "Missing severityBands"
-    assert "suicideItem" in phq9, "Missing suicideItem"
-    assert "redFlagSeverities" in phq9, "Missing redFlagSeverities"
-    assert phq9["suicideItem"] == 9, f"Expected suicideItem=9, got {phq9['suicideItem']}"
-    assert "Berat" in phq9["redFlagSeverities"], "Expected 'Berat' in redFlagSeverities"
-    log(f"✅ PHQ-9 config retrieved:")
-    log(f"   - suicideItem: {phq9['suicideItem']}")
-    log(f"   - severityBands: {len(phq9['severityBands'])} bands")
-    log(f"   - redFlagSeverities: {phq9['redFlagSeverities']}")
-    
-    # 3. PUT to edit instrument
-    log("3. PUT /admin/instruments/phq9 (change name)")
-    original_name = phq9["name"]
-    phq9["name"] = "PHQ-9 (Edited)"
-    resp = requests.put(f"{BASE_URL}/admin/instruments/phq9", headers=headers, json=phq9)
-    assert resp.status_code == 200, f"Put instrument failed: {resp.status_code} {resp.text}"
-    updated = resp.json()
-    assert updated["name"] == "PHQ-9 (Edited)", f"Expected 'PHQ-9 (Edited)', got {updated['name']}"
-    log(f"✅ Instrument name changed: '{original_name}' -> '{updated['name']}'")
-    
-    # 4. GET again to confirm persistence
-    log("4. GET /admin/instruments/phq9 (verify persistence)")
-    resp = requests.get(f"{BASE_URL}/admin/instruments/phq9", headers=headers)
-    assert resp.status_code == 200, f"Get phq9 failed: {resp.status_code} {resp.text}"
-    phq9_after = resp.json()
-    assert phq9_after["name"] == "PHQ-9 (Edited)", f"Name not persisted: {phq9_after['name']}"
-    log(f"✅ Change persisted: {phq9_after['name']}")
-    
-    # 5. Test that new assessment uses updated config
-    log("5. Testing new assessment uses updated config")
-    log("   (Changing a severity band label to verify)")
-    
-    # Change the first severity band label
-    phq9_after["severityBands"][0]["label"] = "Minimal (Test Edit)"
-    resp = requests.put(f"{BASE_URL}/admin/instruments/phq9", headers=headers, json=phq9_after)
-    assert resp.status_code == 200, f"Put instrument failed: {resp.status_code} {resp.text}"
-    log(f"✅ Severity band label changed to: {phq9_after['severityBands'][0]['label']}")
-    
-    # Note: To fully test this, we'd need to submit a new assessment and verify it uses the new label
-    # But that requires a user token and member, which we have from setup
-    # For now, we'll just verify the config was saved
-    resp = requests.get(f"{BASE_URL}/admin/instruments/phq9", headers=headers)
-    assert resp.status_code == 200
-    final_phq9 = resp.json()
-    assert final_phq9["severityBands"][0]["label"] == "Minimal (Test Edit)", \
-        f"Severity band label not persisted: {final_phq9['severityBands'][0]['label']}"
-    log(f"✅ Severity band change persisted")
-    
-    # Restore original config for future tests
-    log("6. Restoring original PHQ-9 config")
-    phq9_after["name"] = original_name
-    phq9_after["severityBands"][0]["label"] = "Minimal"
-    resp = requests.put(f"{BASE_URL}/admin/instruments/phq9", headers=headers, json=phq9_after)
-    assert resp.status_code == 200
-    log(f"✅ Original config restored")
-    
-    return True
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        log(f"7.1. GET /admin/stats -> should include 'newFeedback' field")
+        resp = requests.get(f"{BASE_URL}/admin/stats", headers=headers)
+        assert resp.status_code == 200, f"❌ GET admin stats failed: {resp.status_code} {resp.text}"
+        stats = resp.json()
+        
+        assert "newFeedback" in stats, "❌ Stats missing 'newFeedback' field"
+        assert isinstance(stats["newFeedback"], int), \
+            f"❌ Expected newFeedback to be int, got {type(stats['newFeedback'])}"
+        
+        log(f"✅ PASS: GET /admin/stats includes newFeedback={stats['newFeedback']}")
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
-def test_admin_age_rules(admin_token):
-    """Test age rules configuration"""
+def test_alert_username_field(admin_token, user_data):
+    """Test that alerts have 'username' field (not userEmail)"""
     log("=" * 80)
-    log("TEST: Age Rules Configuration")
-    log("=" * 80)
-    
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    
-    # 1. GET age rules
-    log("1. GET /admin/age-rules")
-    resp = requests.get(f"{BASE_URL}/admin/age-rules", headers=headers)
-    assert resp.status_code == 200, f"Get age rules failed: {resp.status_code} {resp.text}"
-    age_rules = resp.json()
-    
-    assert "rules" in age_rules, "Missing 'rules' field"
-    assert isinstance(age_rules["rules"], list), "Expected rules to be a list"
-    assert len(age_rules["rules"]) == 3, f"Expected 3 rules, got {len(age_rules['rules'])}"
-    
-    log(f"✅ Age rules retrieved: {len(age_rules['rules'])} rules")
-    for rule in age_rules["rules"]:
-        log(f"   - {rule['label']}: age {rule['minAge']}-{rule['maxAge']} -> {rule['codes']}")
-    
-    # 2. PUT age rules (same rules, just to test endpoint)
-    log("2. PUT /admin/age-rules (persist same rules)")
-    resp = requests.put(f"{BASE_URL}/admin/age-rules", headers=headers, json={
-        "rules": age_rules["rules"]
-    })
-    assert resp.status_code == 200, f"Put age rules failed: {resp.status_code} {resp.text}"
-    updated = resp.json()
-    assert updated["rules"] == age_rules["rules"], "Rules not persisted correctly"
-    log(f"✅ Age rules persisted successfully")
-    
-    return True
-
-def test_admin_audit_logs(admin_token, alert_id):
-    """Test audit logs"""
-    log("=" * 80)
-    log("TEST: Audit Logs")
+    log("TEST 8: ALERT USERNAME FIELD CHECK")
     log("=" * 80)
     
-    headers = {"Authorization": f"Bearer {admin_token}"}
-    
-    log("1. GET /admin/audit-logs")
-    resp = requests.get(f"{BASE_URL}/admin/audit-logs", headers=headers)
-    assert resp.status_code == 200, f"Get audit logs failed: {resp.status_code} {resp.text}"
-    logs = resp.json()
-    
-    assert isinstance(logs, list), "Expected list of logs"
-    assert len(logs) > 0, "Expected at least one audit log"
-    
-    # Verify we have logs for alert status changes
-    alert_logs = [l for l in logs if "Alert" in l.get("action", "")]
-    assert len(alert_logs) > 0, "Expected audit logs for alert status changes"
-    
-    # Verify we have logs for instrument edits
-    instrument_logs = [l for l in logs if "Kuesioner" in l.get("action", "")]
-    assert len(instrument_logs) > 0, "Expected audit logs for instrument edits"
-    
-    log(f"✅ Audit logs retrieved: {len(logs)} total logs")
-    log(f"   - Alert status change logs: {len(alert_logs)}")
-    log(f"   - Instrument edit logs: {len(instrument_logs)}")
-    
-    # Show some sample logs
-    log("   Sample audit log entries:")
-    for log_entry in logs[:5]:
-        log(f"     - {log_entry['action']} by {log_entry.get('actorName', 'Unknown')} ({log_entry.get('actorRole', 'Unknown')})")
-    
-    return True
+    try:
+        headers = {"Authorization": f"Bearer {admin_token}"}
+        
+        log(f"8.1. GET /admin/alerts -> check that alerts have 'username' field")
+        resp = requests.get(f"{BASE_URL}/admin/alerts", headers=headers)
+        assert resp.status_code == 200, f"❌ GET alerts failed: {resp.status_code} {resp.text}"
+        alerts = resp.json()
+        
+        assert isinstance(alerts, list), "❌ Expected list of alerts"
+        assert len(alerts) > 0, "❌ Expected at least one alert (from PHQ-9 submission)"
+        
+        # Find alert for our user
+        user_alert = None
+        for alert in alerts:
+            if alert.get("username") == user_data["username"]:
+                user_alert = alert
+                break
+        
+        assert user_alert is not None, \
+            f"❌ No alert found for username '{user_data['username']}'"
+        
+        assert "username" in user_alert, "❌ Alert missing 'username' field"
+        assert "userEmail" not in user_alert, "❌ Alert should NOT have 'userEmail' field (replaced by username)"
+        assert user_alert["username"] == user_data["username"], \
+            f"❌ Expected username '{user_data['username']}', got '{user_alert['username']}'"
+        
+        log(f"✅ PASS: Alert has 'username' field (not userEmail): username='{user_alert['username']}'")
+        
+    except AssertionError as e:
+        log(f"❌ FAIL: {str(e)}")
+        raise
 
 def main():
     """Run all tests"""
+    log("🚀 Starting USERNAME AUTH + FEEDBACK Backend Tests")
+    log("")
+    
+    all_passed = True
+    results = []
+    
     try:
-        log("🚀 Starting SIAP Admin Panel Backend Tests")
-        log("")
-        
-        # Setup
-        setup_data = test_setup_normal_user()
-        test_submit_assessments(setup_data)
-        
-        # Admin auth
-        admin_token = test_admin_auth()
-        
-        # RBAC tests
-        test_rbac(setup_data, admin_token)
-        
-        # Admin endpoints
-        test_admin_stats(admin_token)
-        alert_id = test_admin_alerts(admin_token)
-        test_admin_instruments(admin_token)
-        test_admin_age_rules(admin_token)
-        test_admin_audit_logs(admin_token, alert_id)
-        
-        log("")
-        log("=" * 80)
-        log("🎉 ALL TESTS PASSED!")
-        log("=" * 80)
-        log("")
-        log("SUMMARY:")
-        log("✅ Setup: Normal user registration and member creation")
-        log("✅ Setup: Assessment submission with alert creation")
-        log("✅ REGRESSION: SDQ scoring accurate after refactor (E=0,C=2,H=4,P=4,Pr=0,Total=10)")
-        log("✅ Admin authentication (admin@siap.id)")
-        log("✅ RBAC: Normal user gets 403, no token gets 401")
-        log("✅ GET /admin/stats with all required fields")
-        log("✅ GET /admin/alerts (all and filtered)")
-        log("✅ PATCH /admin/alerts/:id (status transitions)")
-        log("✅ GET /admin/alerts/:id (with nested assessment)")
-        log("✅ GET /admin/instruments (4 instruments)")
-        log("✅ GET /admin/instruments/phq9 (full config)")
-        log("✅ PUT /admin/instruments/phq9 (edit and persist)")
-        log("✅ GET /admin/age-rules")
-        log("✅ PUT /admin/age-rules")
-        log("✅ GET /admin/audit-logs (with alert and instrument entries)")
-        
-        return 0
-        
-    except AssertionError as e:
-        log("")
-        log("=" * 80)
-        log(f"❌ TEST FAILED: {str(e)}")
-        log("=" * 80)
-        return 1
+        # Test 1: Register with username
+        user_data = test_username_auth_register()
+        results.append("✅ TEST 1: USERNAME AUTH - REGISTER")
     except Exception as e:
-        log("")
-        log("=" * 80)
-        log(f"❌ ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        log("=" * 80)
+        results.append("❌ TEST 1: USERNAME AUTH - REGISTER")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    try:
+        # Test 2: Login with username
+        admin_token = test_username_auth_login(user_data)
+        results.append("✅ TEST 2: USERNAME AUTH - LOGIN")
+    except Exception as e:
+        results.append("❌ TEST 2: USERNAME AUTH - LOGIN")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+        return 1
+    
+    try:
+        # Test 3: GET /auth/me
+        test_username_auth_me(user_data)
+        results.append("✅ TEST 3: USERNAME AUTH - GET /auth/me")
+    except Exception as e:
+        results.append("❌ TEST 3: USERNAME AUTH - GET /auth/me")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    try:
+        # Test 4: Forgot/reset password
+        test_username_forgot_reset_password(user_data)
+        results.append("✅ TEST 4: USERNAME AUTH - FORGOT/RESET PASSWORD")
+    except Exception as e:
+        results.append("❌ TEST 4: USERNAME AUTH - FORGOT/RESET PASSWORD")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    try:
+        # Test 5: Feedback user endpoints
+        feedback_id = test_feedback_user(user_data)
+        results.append("✅ TEST 5: FEEDBACK - USER ENDPOINTS")
+    except Exception as e:
+        results.append("❌ TEST 5: FEEDBACK - USER ENDPOINTS")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+        return 1
+    
+    try:
+        # Test 6: Feedback admin endpoints
+        test_feedback_admin(admin_token, user_data, feedback_id)
+        results.append("✅ TEST 6: FEEDBACK - ADMIN ENDPOINTS")
+    except Exception as e:
+        results.append("❌ TEST 6: FEEDBACK - ADMIN ENDPOINTS")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    try:
+        # Test 7: Admin stats newFeedback
+        test_admin_stats_new_feedback(admin_token)
+        results.append("✅ TEST 7: ADMIN STATS - newFeedback COUNT")
+    except Exception as e:
+        results.append("❌ TEST 7: ADMIN STATS - newFeedback COUNT")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    try:
+        # Test 8: Alert username field
+        test_alert_username_field(admin_token, user_data)
+        results.append("✅ TEST 8: ALERT USERNAME FIELD CHECK")
+    except Exception as e:
+        results.append("❌ TEST 8: ALERT USERNAME FIELD CHECK")
+        all_passed = False
+        log(f"ERROR: {str(e)}")
+    
+    # Print summary
+    log("")
+    log("=" * 80)
+    if all_passed:
+        log("🎉 ALL TESTS PASSED!")
+    else:
+        log("⚠️  SOME TESTS FAILED")
+    log("=" * 80)
+    log("")
+    log("SUMMARY:")
+    for result in results:
+        log(result)
+    log("")
+    
+    if all_passed:
+        log("DETAILED RESULTS:")
+        log("✅ Register with username returns user with 'username' field (NOT email)")
+        log("✅ Duplicate username returns 400 'Username sudah digunakan'")
+        log("✅ Missing username returns 400")
+        log("✅ Login with username and password works")
+        log("✅ Login with wrong password returns 401")
+        log("✅ Admin login with username 'admin' returns super_admin role")
+        log("✅ GET /auth/me returns user with username field")
+        log("✅ Forgot password with username returns token")
+        log("✅ Forgot password with unknown username returns 404")
+        log("✅ Reset password works, old password fails, new password works")
+        log("✅ POST /feedback returns feedback with status='Baru' and username")
+        log("✅ POST /feedback with empty message returns 400")
+        log("✅ GET /feedback returns only user's feedback")
+        log("✅ GET /admin/feedback returns all feedback")
+        log("✅ PATCH /admin/feedback/:id updates status and reply")
+        log("✅ User can see admin's reply")
+        log("✅ Normal user gets 403 on admin feedback endpoint")
+        log("✅ DELETE /admin/feedback/:id works")
+        log("✅ GET /admin/stats includes newFeedback count")
+        log("✅ Alerts have 'username' field (not userEmail)")
+        return 0
+    else:
         return 1
 
 if __name__ == "__main__":
