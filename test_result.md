@@ -456,3 +456,29 @@ backend_articles:
 agent_communication:
     -agent: "testing"
     -message: "🎉 ARTICLES FEATURE BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 4 major categories with 16 individual test scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ PUBLIC ENDPOINTS: GET /articles returns only published articles (3 seeded). List correctly OMITS 'content' field (only title, excerpt, coverImage, author, createdAt). GET /articles/:id returns full article WITH content (HTML). GET /articles/:slug works (slug-based access). GET /articles/nonexistent returns 404. ✅ ADMIN CMS: Admin login with username 'admin' password 'admin123' works. GET /admin/articles returns ALL articles (includes drafts). POST /admin/articles creates draft with id, slug, status='draft', author='Super Admin'. POST validation: missing title/content returns 400. PUT /admin/articles/:id publishes draft (status='published'). DELETE /admin/articles/:id removes article. ✅ DRAFT VISIBILITY: Draft NOT visible in public GET /articles. Public GET /articles/:draftId returns 404 (draft hidden). After publish, article appears in public list and detail accessible. After delete, article removed from all lists. Status transitions working correctly (draft -> published -> deleted). ✅ RBAC: Normal user gets 403 on GET /admin/articles and POST /admin/articles. NO ISSUES FOUND. All endpoints working correctly with proper status codes, content field handling (omitted in list, included in detail), draft visibility control, and authorization checks. Backend is production-ready."
+
+## ---- UPDATE 6: IMAGE UPLOAD ----
+agent_communication:
+    -agent: "main"
+    -message: "Image upload stored in MongoDB base64. TEST (admin token admin/admin123): POST /api/admin/upload {dataUrl:'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='} -> 200 {id, url:'/api/images/<id>'}. Then GET that url (public, no auth) -> 200 with Content-Type image/png (binary body). Invalid: POST with dataUrl:'notadataurl' -> 400; POST with a non-image dataUrl 'data:text/plain;base64,aGVsbG8=' -> 400. RBAC: normal user token POST /api/admin/upload -> 403. GET /api/images/nonexistent -> 404."
+
+backend_image_upload:
+  - task: "Image upload (POST /admin/upload, GET /images/:id)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Image upload stored in MongoDB base64. POST /admin/upload accepts dataUrl, validates format and MIME type, stores in MongoDB, returns {id, url}. GET /images/:id serves binary image with correct Content-Type header."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL IMAGE UPLOAD TESTS PASSED (100% SUCCESS). Comprehensive testing with 7 test scenarios. IMAGE UPLOAD FULLY WORKING: ADMIN ENDPOINTS: (1) Admin login with username 'admin' password 'admin123' returns token with role='super_admin' (200). (2) POST /api/admin/upload with valid image dataUrl 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==' returns 200 with {id:'b8ee5974-09f5-43b0-8238-dc645479ce1c', url:'/api/images/b8ee5974-09f5-43b0-8238-dc645479ce1c'}. URL format correct. (3) POST /api/admin/upload with invalid dataUrl 'notadataurl' correctly returns 400. (4) POST /api/admin/upload with non-image dataUrl 'data:text/plain;base64,aGVsbG8=' correctly returns 400 (MIME type validation working). PUBLIC ENDPOINTS: (5) GET /api/images/:id (no auth) returns 200 with binary image (70 bytes). CRITICAL: Content-Type header is 'image/png' (correct). Response is binary (NOT JSON) - verified. (6) GET /api/images/nonexistent-id-999 correctly returns 404. RBAC: (7) Normal user token on POST /api/admin/upload correctly returns 403. All status codes correct, Content-Type header correct, binary response verified, MIME type validation working, RBAC enforced. NO ISSUES FOUND."
+
+agent_communication:
+    -agent: "testing"
+    -message: "🎉 IMAGE UPLOAD BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 7 scenarios covering full upload and serving lifecycle. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Admin login working (username 'admin' password 'admin123' -> super_admin). ✅ POST /admin/upload with valid image dataUrl returns 200 {id, url} with correct URL format '/api/images/<id>'. ✅ GET /api/images/:id returns 200 with binary image (NOT JSON). ✅ Content-Type header is 'image/png' (CORRECT - verified). ✅ Invalid dataUrl 'notadataurl' returns 400. ✅ Non-image dataUrl 'data:text/plain;base64,...' returns 400 (MIME type validation working). ✅ Normal user gets 403 on POST /admin/upload (RBAC enforced). ✅ GET /api/images/nonexistent-id returns 404. NO ISSUES FOUND. Image upload stores in MongoDB correctly, image serving returns binary with correct Content-Type header, all validations working, RBAC enforced. Backend is production-ready."
+

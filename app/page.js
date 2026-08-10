@@ -272,7 +272,7 @@ function PublicSite({ onLogin }) {
 
           <footer className="bg-slate-900 text-slate-300 py-10 mt-6">
             <div className="container flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-2"><Brain className="h-5 w-5 text-teal-400" /><span className="font-bold text-white">PHD</span> — Psychological Health Detection</div>
+              <div className="flex items-center gap-2"><Brain className="h-5 w-5 text-teal-400" /><span className="font-bold text-white">PHD</span> — Psychological Health Detector</div>
               <div className="text-sm">Jika dalam keadaan darurat, hubungi Hotline SEJIWA/Kemenkes: <b className="text-white">119 ext 8</b></div>
             </div>
           </footer>
@@ -1071,14 +1071,16 @@ function AdminFeedback({ aapi }) {
   )
 }
 
-function RichTextEditor({ value, onChange }) {
+function RichTextEditor({ value, onChange, onUpload }) {
   const ref = useRef(null)
+  const fileRef = useRef(null)
   useEffect(() => { if (ref.current) ref.current.innerHTML = value || '' }, [])
   function emit() { if (ref.current) onChange(ref.current.innerHTML) }
   function exec(cmd, val = null) { ref.current?.focus(); document.execCommand(cmd, false, val); emit() }
   function block(tag) { ref.current?.focus(); document.execCommand('formatBlock', false, tag); emit() }
   function addLink() { const url = prompt('Masukkan URL tautan:'); if (url) exec('createLink', url) }
-  function addImage() { const url = prompt('Masukkan URL gambar:'); if (url) exec('insertHTML', `<img src="${url}" style="max-width:100%;border-radius:12px;margin:12px 0" />`) }
+  async function handleFile(e) { const f = e.target.files?.[0]; e.target.value = ''; if (!f || !onUpload) return; toast.message('Mengunggah gambar...'); try { const url = await onUpload(f); if (url) exec('insertHTML', `<img src="${url}" style="max-width:100%;border-radius:12px;margin:12px 0" />`) } catch (err) { toast.error('Gagal mengunggah gambar') } }
+  function addImage() { fileRef.current?.click() }
   function addVideo() { const url = prompt('Masukkan URL YouTube atau video:'); if (!url) return; const embed = url.includes('watch?v=') ? url.replace('watch?v=', 'embed/').split('&')[0] : (url.includes('youtu.be/') ? url.replace('youtu.be/', 'www.youtube.com/embed/') : url); exec('insertHTML', `<div style="position:relative;padding-bottom:56.25%;height:0;border-radius:12px;overflow:hidden;margin:12px 0"><iframe src="${embed}" style="position:absolute;top:0;left:0;width:100%;height:100%" frameborder="0" allowfullscreen></iframe></div><p></p>`) }
   const Btn = ({ onClick, title, children }) => <button type="button" title={title} onMouseDown={e => e.preventDefault()} onClick={onClick} className="h-8 w-8 flex items-center justify-center rounded hover:bg-slate-200 text-slate-600">{children}</button>
   return (
@@ -1099,6 +1101,7 @@ function RichTextEditor({ value, onChange }) {
         <Btn title="Sisip gambar" onClick={addImage}><ImageIcon className="h-4 w-4" /></Btn>
         <Btn title="Sisip video" onClick={addVideo}><Video className="h-4 w-4" /></Btn>
       </div>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleFile} />
       <div ref={ref} contentEditable suppressContentEditableWarning onInput={emit} onBlur={emit} className="article-content min-h-[320px] max-h-[520px] overflow-auto p-4 focus:outline-none text-slate-700 leading-relaxed" />
     </div>
   )
@@ -1107,8 +1110,12 @@ function RichTextEditor({ value, onChange }) {
 function AdminArticles({ aapi }) {
   const [list, setList] = useState([])
   const [edit, setEdit] = useState(null)
+  const coverRef = useRef(null)
   const load = () => aapi('/admin/articles').then(setList).catch(e => toast.error(e.message))
   useEffect(() => { load() }, [])
+  function readAsDataURL(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(file) }) }
+  async function uploadFile(file) { if (file.size > 5 * 1024 * 1024) { toast.error('Ukuran gambar maksimal 5MB'); throw new Error('too big') } const dataUrl = await readAsDataURL(file); const d = await aapi('/admin/upload', { method: 'POST', body: { dataUrl } }); return d.url }
+  async function onCoverFile(e) { const f = e.target.files?.[0]; e.target.value = ''; if (!f) return; try { const url = await uploadFile(f); setEdit(prev => ({ ...prev, coverImage: url })); toast.success('Gambar sampul diunggah') } catch (err) {} }
   function openNew() { setEdit({ title: '', excerpt: '', coverImage: '', content: '', status: 'draft' }) }
   function insert(snippet) { setEdit(prev => ({ ...prev, content: (prev.content || '') + snippet })) }
   function addImage() { const url = prompt('Masukkan URL gambar:'); if (url) insert(`\n<img src="${url}" style="width:100%;border-radius:12px;margin:12px 0" />\n`) }
@@ -1132,10 +1139,10 @@ function AdminArticles({ aapi }) {
       </div>
       <div className="space-y-3 max-w-3xl">
         <div><Label>Judul</Label><Input value={edit.title} onChange={e => setEdit({ ...edit, title: e.target.value })} /></div>
-        <div><Label>URL Gambar Sampul</Label><Input value={edit.coverImage} onChange={e => setEdit({ ...edit, coverImage: e.target.value })} placeholder="https://..." /></div>
+        <div><Label>Gambar Sampul</Label><div className="flex gap-2"><Input value={edit.coverImage} onChange={e => setEdit({ ...edit, coverImage: e.target.value })} placeholder="Tempel URL atau unggah →" /><input ref={coverRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onCoverFile} /><Button type="button" variant="outline" onClick={() => coverRef.current?.click()}><ImageIcon className="h-4 w-4 mr-1" /> Unggah</Button></div></div>
         {edit.coverImage && <img src={edit.coverImage} alt="cover" className="w-full h-40 object-cover rounded-lg" />}
         <div><Label>Ringkasan (excerpt)</Label><Textarea rows={2} value={edit.excerpt} onChange={e => setEdit({ ...edit, excerpt: e.target.value })} /></div>
-        <div><Label>Konten</Label><RichTextEditor key={edit.id || 'new'} value={edit.content} onChange={html => setEdit(prev => ({ ...prev, content: html }))} /></div>
+        <div><Label>Konten</Label><RichTextEditor key={edit.id || 'new'} value={edit.content} onChange={html => setEdit(prev => ({ ...prev, content: html }))} onUpload={uploadFile} /></div>
         <div><Label>Status</Label><Select value={edit.status} onValueChange={v => setEdit({ ...edit, status: v })}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="published">Publikasikan</SelectItem></SelectContent></Select></div>
       </div>
     </div>

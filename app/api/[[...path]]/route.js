@@ -499,6 +499,14 @@ async function handleRoute(request, { params }) {
       return handleCORS(NextResponse.json(clean))
     }
 
+    // ---------- IMAGES (public serve) ----------
+    if (route.startsWith('/images/') && method === 'GET') {
+      const img = await db.collection('images').findOne({ id: path[1] })
+      if (!img) return handleCORS(NextResponse.json({ error: 'Gambar tidak ditemukan' }, { status: 404 }))
+      const buf = Buffer.from(img.data, 'base64')
+      return new NextResponse(buf, { status: 200, headers: { 'Content-Type': img.contentType || 'image/jpeg', 'Cache-Control': 'public, max-age=31536000, immutable' } })
+    }
+
     // ---------- FEEDBACK (user) ----------
     if (route === '/feedback' && method === 'POST') {
       const user = await getUserFromRequest(request, db)
@@ -702,6 +710,19 @@ async function handleRoute(request, { params }) {
         await db.collection('articles').deleteOne({ id: path[2] })
         await audit(db, user, 'Hapus Artikel', path[2])
         return handleCORS(NextResponse.json({ ok: true }))
+      }
+
+      // ---- Image upload (stored in MongoDB as base64) ----
+      if (route === '/admin/upload' && method === 'POST') {
+        const { dataUrl } = await request.json()
+        const m = /^data:(.+?);base64,(.*)$/.exec(dataUrl || '')
+        if (!m) return handleCORS(NextResponse.json({ error: 'Format gambar tidak valid' }, { status: 400 }))
+        const contentType = m[1]; const data = m[2]
+        if (!contentType.startsWith('image/')) return handleCORS(NextResponse.json({ error: 'File harus berupa gambar' }, { status: 400 }))
+        if (data.length > 8 * 1024 * 1024) return handleCORS(NextResponse.json({ error: 'Ukuran gambar terlalu besar (maks ~5MB)' }, { status: 400 }))
+        const id = uuidv4()
+        await db.collection('images').insertOne({ id, contentType, data, createdAt: new Date() })
+        return handleCORS(NextResponse.json({ id, url: `/api/images/${id}` }))
       }
     }
 
