@@ -18,6 +18,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
 import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video, MapPin, BarChart3 } from 'lucide-react'
+import { REGIONS, KOTA_LIST, kecamatanOf, kelurahanOf } from '@/lib/regions'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
 const ADMIN_ROLES = ['super_admin', 'admin_kua', 'admin_pa']
@@ -71,7 +72,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
 
   const [authMode, setAuthMode] = useState('login')
-  const [af, setAf] = useState({ name: '', username: '', password: '', kota: '', kecamatan: '', alamat: '' })
+  const [af, setAf] = useState({ name: '', username: '', password: '', kota: '', kecamatan: '', kelurahan: '', alamat: '' })
 
   const [memberDialog, setMemberDialog] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
@@ -89,6 +90,10 @@ export default function App() {
 
   async function handleAuth(e) {
     e.preventDefault()
+    if (authMode === 'register' && (!af.kota || !af.kecamatan || !af.kelurahan || !af.alamat)) {
+      toast.error('Lengkapi kota, kecamatan, kelurahan/desa, dan alamat')
+      return
+    }
     setLoading(true)
     try {
       const path = authMode === 'login' ? '/auth/login' : '/auth/register'
@@ -344,10 +349,29 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading, onB
                 <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
                 {authMode === 'register' && (<>
                   <div className="grid grid-cols-2 gap-3">
-                    <div><Label>Kota / Kabupaten</Label><Input value={af.kota} onChange={e => setAf({ ...af, kota: e.target.value })} placeholder="cth: Kota Semarang" required /></div>
-                    <div><Label>Kecamatan</Label><Input value={af.kecamatan} onChange={e => setAf({ ...af, kecamatan: e.target.value })} placeholder="cth: Tembalang" required /></div>
+                    <div>
+                      <Label>Kota / Kabupaten</Label>
+                      <Select value={af.kota} onValueChange={v => setAf({ ...af, kota: v, kecamatan: '', kelurahan: '' })}>
+                        <SelectTrigger><SelectValue placeholder="Pilih kota" /></SelectTrigger>
+                        <SelectContent>{KOTA_LIST.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Kecamatan</Label>
+                      <Select value={af.kecamatan} onValueChange={v => setAf({ ...af, kecamatan: v, kelurahan: '' })} disabled={!af.kota}>
+                        <SelectTrigger><SelectValue placeholder={af.kota ? 'Pilih kecamatan' : 'Pilih kota dulu'} /></SelectTrigger>
+                        <SelectContent>{kecamatanOf(af.kota).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                  <div><Label>Alamat Lengkap</Label><Textarea value={af.alamat} onChange={e => setAf({ ...af, alamat: e.target.value })} placeholder="Nama jalan, nomor rumah, RT/RW, kelurahan" required /></div>
+                  <div>
+                    <Label>Kelurahan / Desa</Label>
+                    <Select value={af.kelurahan} onValueChange={v => setAf({ ...af, kelurahan: v })} disabled={!af.kecamatan}>
+                      <SelectTrigger><SelectValue placeholder={af.kecamatan ? 'Pilih kelurahan/desa' : 'Pilih kecamatan dulu'} /></SelectTrigger>
+                      <SelectContent>{kelurahanOf(af.kota, af.kecamatan).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Alamat Lengkap</Label><Textarea value={af.alamat} onChange={e => setAf({ ...af, alamat: e.target.value })} placeholder="Nama jalan, nomor rumah, RT/RW" required /></div>
                 </>)}
                 <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
                 {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
@@ -682,7 +706,7 @@ function FeedbackDialog({ open, onClose, token }) {
 }
 
 // ==================== ADMIN PANEL ====================
-const ROLE_LABEL = { super_admin: 'Super Admin', admin_kua: 'Admin Mediator KUA', admin_pa: 'Admin Mediator PA' }
+const ROLE_LABEL = { super_admin: 'Super Admin', admin_kua: 'Admin Mediator KUA', admin_pa: 'Admin Mediator PA', admin_mudin: 'Admin Mediator Mudin' }
 const SEV_CLS = { Kritis: 'bg-red-600 text-white', Tinggi: 'bg-red-100 text-red-700 border-red-200', Sedang: 'bg-amber-100 text-amber-700 border-amber-200' }
 const STATUS_CLS = { New: 'bg-red-100 text-red-700', 'Under Review': 'bg-amber-100 text-amber-700', Referred: 'bg-blue-100 text-blue-700', Resolved: 'bg-emerald-100 text-emerald-700' }
 const SUB_NAMES_CLIENT = { E: 'Emosional (E)', C: 'Perilaku (C)', H: 'Hiperaktivitas (H)', P: 'Teman Sebaya (P)' }
@@ -691,7 +715,7 @@ function AdminPanel({ user, token, logout }) {
   const [tab, setTab] = useState('dashboard')
   const aapi = (path, opts = {}) => api(path, { ...opts, token })
   const isSuper = user.role === 'super_admin'
-  const scopeText = user.role === 'admin_kua' ? `Kecamatan ${user.scopeKecamatan || '-'}` : user.role === 'admin_pa' ? `Kota ${user.scopeKota || '-'}` : null
+  const scopeText = user.role === 'admin_kua' ? `Kecamatan ${user.scopeKecamatan || '-'}` : user.role === 'admin_pa' ? `Kota ${user.scopeKota || '-'}` : user.role === 'admin_mudin' ? `Kelurahan/Desa ${user.scopeKelurahan || '-'}` : null
   return (
     <div className="min-h-screen bg-slate-50">
       <Toaster position="top-center" richColors />
@@ -752,22 +776,24 @@ function AdminDashboard({ aapi, isSuper }) {
   const [range, setRange] = useState('daily')
   const [kotaFilter, setKotaFilter] = useState('all')
   const [kecFilter, setKecFilter] = useState('all')
+  const [kelFilter, setKelFilter] = useState('all')
   const [compareBy, setCompareBy] = useState('kota')
   useEffect(() => {
     let active = true
-    const qs = `range=${range}&kota=${encodeURIComponent(kotaFilter)}&kecamatan=${encodeURIComponent(kecFilter)}`
+    const qs = `range=${range}&kota=${encodeURIComponent(kotaFilter)}&kecamatan=${encodeURIComponent(kecFilter)}&kelurahan=${encodeURIComponent(kelFilter)}`
     const load = () => aapi(`/admin/stats?${qs}`).then(d => { if (active) { setStats(d); if (d?.regionComparison?.field) setCompareBy(d.regionComparison.field) } }).catch(() => {})
     load(); const t = setInterval(load, 15000)
     return () => { active = false; clearInterval(t) }
-  }, [range, kotaFilter, kecFilter])
+  }, [range, kotaFilter, kecFilter, kelFilter])
   if (!stats) return <div className="text-slate-500">Memuat statistik...</div>
   const distData = [
     { name: 'Normal', value: stats.distribution.Normal, fill: '#10b981' },
     { name: 'Ambang', value: stats.distribution.Ambang, fill: '#f59e0b' },
     { name: 'Abnormal', value: stats.distribution.Abnormal, fill: '#ef4444' },
   ]
-  const rc = stats.regionComparison || { field: null, byKota: [], byKecamatan: [] }
-  const compareData = (compareBy === 'kecamatan' ? rc.byKecamatan : rc.byKota) || []
+  const rc = stats.regionComparison || { field: null, byKota: [], byKecamatan: [], byKelurahan: [] }
+  const compareData = (compareBy === 'kelurahan' ? rc.byKelurahan : compareBy === 'kecamatan' ? rc.byKecamatan : rc.byKota) || []
+  const compareLabel = compareBy === 'kelurahan' ? 'per kelurahan/desa' : compareBy === 'kecamatan' ? 'per kecamatan' : 'per kota'
   const showCompare = !!rc.field
   return (
     <div className="space-y-6">
@@ -775,15 +801,19 @@ function AdminDashboard({ aapi, isSuper }) {
         <Card className="border-teal-100">
           <CardContent className="py-4 flex flex-wrap items-center gap-3">
             <span className="text-sm font-medium text-slate-600 flex items-center gap-1"><MapPin className="h-4 w-4 text-teal-600" /> Filter Wilayah:</span>
-            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all') }}>
-              <SelectTrigger className="w-52 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger>
+            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all'); setKelFilter('all') }}>
+              <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Semua Kota / Kabupaten</SelectItem>{(stats.filters?.kotaList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
             </Select>
-            <Select value={kecFilter} onValueChange={setKecFilter}>
-              <SelectTrigger className="w-52 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger>
+            <Select value={kecFilter} onValueChange={v => { setKecFilter(v); setKelFilter('all') }} disabled={kotaFilter === 'all'}>
+              <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger>
               <SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{(stats.filters?.kecamatanList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
             </Select>
-            {(kotaFilter !== 'all' || kecFilter !== 'all') && <Button variant="ghost" size="sm" onClick={() => { setKotaFilter('all'); setKecFilter('all') }}>Reset</Button>}
+            <Select value={kelFilter} onValueChange={setKelFilter} disabled={kecFilter === 'all'}>
+              <SelectTrigger className="w-48 h-9"><SelectValue placeholder="Semua Kelurahan/Desa" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kelurahan/Desa</SelectItem>{(stats.filters?.kelurahanList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            {(kotaFilter !== 'all' || kecFilter !== 'all' || kelFilter !== 'all') && <Button variant="ghost" size="sm" onClick={() => { setKotaFilter('all'); setKecFilter('all'); setKelFilter('all') }}>Reset</Button>}
           </CardContent>
         </Card>
       )}
@@ -808,12 +838,12 @@ function AdminDashboard({ aapi, isSuper }) {
               <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-5 w-5 text-teal-600" /> Perbandingan Antar Wilayah</CardTitle>
               {isSuper && (
                 <Select value={compareBy} onValueChange={setCompareBy}>
-                  <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="kota">Antar Kota</SelectItem><SelectItem value="kecamatan">Antar Kecamatan</SelectItem></SelectContent>
+                  <SelectTrigger className="w-44 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="kota">Antar Kota</SelectItem><SelectItem value="kecamatan">Antar Kecamatan</SelectItem><SelectItem value="kelurahan">Antar Kelurahan/Desa</SelectItem></SelectContent>
                 </Select>
               )}
             </div>
-            <CardDescription>Komposisi kategori hasil asesmen ({compareBy === 'kecamatan' ? 'per kecamatan' : 'per kota'}). Ditampilkan maksimal 10 wilayah dengan asesmen terbanyak.</CardDescription>
+            <CardDescription>Komposisi kategori hasil asesmen ({compareLabel}). Ditampilkan maksimal 10 wilayah dengan asesmen terbanyak.</CardDescription>
           </CardHeader>
           <CardContent>
             {compareData.length === 0 ? <div className="text-sm text-slate-400 py-8 text-center">Belum ada data wilayah.</div> : (
@@ -848,6 +878,7 @@ function AdminAlerts({ aapi, isSuper }) {
   const [filter, setFilter] = useState('all')
   const [kotaFilter, setKotaFilter] = useState('all')
   const [kecFilter, setKecFilter] = useState('all')
+  const [kelFilter, setKelFilter] = useState('all')
   const [detail, setDetail] = useState(null)
   const load = () => aapi(`/admin/alerts?status=${filter}`).then(setAlerts).catch(e => toast.error(e.message))
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t) }, [filter])
@@ -857,17 +888,19 @@ function AdminAlerts({ aapi, isSuper }) {
   async function openDetail(id) { try { const d = await aapi(`/admin/alerts/${id}`); setDetail(d) } catch (e) { toast.error(e.message) } }
   const kotaOpts = useMemo(() => Array.from(new Set(alerts.map(a => a.kota).filter(Boolean))).sort(), [alerts])
   const kecOpts = useMemo(() => Array.from(new Set(alerts.filter(a => kotaFilter === 'all' || a.kota === kotaFilter).map(a => a.kecamatan).filter(Boolean))).sort(), [alerts, kotaFilter])
-  const shown = alerts.filter(a => (kotaFilter === 'all' || a.kota === kotaFilter) && (kecFilter === 'all' || a.kecamatan === kecFilter))
+  const kelOpts = useMemo(() => Array.from(new Set(alerts.filter(a => (kotaFilter === 'all' || a.kota === kotaFilter) && (kecFilter === 'all' || a.kecamatan === kecFilter)).map(a => a.kelurahan).filter(Boolean))).sort(), [alerts, kotaFilter, kecFilter])
+  const shown = alerts.filter(a => (kotaFilter === 'all' || a.kota === kotaFilter) && (kecFilter === 'all' || a.kecamatan === kecFilter) && (kelFilter === 'all' || a.kelurahan === kelFilter))
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-red-600" /> Red Flag Alert System</h3><p className="text-sm text-slate-500">Diperbarui otomatis tiap 15 detik.</p></div>
         <div className="flex items-center gap-2 flex-wrap">
           {isSuper && (<>
-            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all') }}><SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kota</SelectItem>{kotaOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
-            <Select value={kecFilter} onValueChange={setKecFilter}><SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{kecOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all'); setKelFilter('all') }}><SelectTrigger className="w-40 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kota</SelectItem>{kotaOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+            <Select value={kecFilter} onValueChange={v => { setKecFilter(v); setKelFilter('all') }}><SelectTrigger className="w-40 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{kecOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+            <Select value={kelFilter} onValueChange={setKelFilter}><SelectTrigger className="w-40 h-9"><SelectValue placeholder="Semua Kelurahan" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kelurahan/Desa</SelectItem>{kelOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
           </>)}
-          <Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent>{['all', 'New', 'Under Review', 'Referred', 'Resolved'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'Semua Status' : s}</SelectItem>)}</SelectContent></Select>
+          <Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-40"><SelectValue /></SelectTrigger><SelectContent>{['all', 'New', 'Under Review', 'Referred', 'Resolved'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'Semua Status' : s}</SelectItem>)}</SelectContent></Select>
           <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
         </div>
       </div>
@@ -879,7 +912,7 @@ function AdminAlerts({ aapi, isSuper }) {
               <TableRow key={a.id} className={a.status === 'New' ? 'bg-red-50/40' : ''}>
                 <TableCell className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString('id-ID')}</TableCell>
                 <TableCell className="text-sm font-medium">{a.memberName}<div className="text-xs text-slate-400">{a.memberAge} th • @{a.username}</div></TableCell>
-                <TableCell className="text-sm">{a.kota || '-'}<div className="text-xs text-slate-400">{a.kecamatan || '-'}</div></TableCell>
+                <TableCell className="text-sm">{a.kota || '-'}<div className="text-xs text-slate-400">{a.kecamatan || '-'}{a.kelurahan ? ` • ${a.kelurahan}` : ''}</div></TableCell>
                 <TableCell className="text-sm">{a.instrumentName}</TableCell>
                 <TableCell className="text-sm">{a.type}</TableCell>
                 <TableCell className="text-center"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${SEV_CLS[a.severity] || 'bg-slate-100'}`}>{a.severity}</span></TableCell>
@@ -896,7 +929,7 @@ function AdminAlerts({ aapi, isSuper }) {
           {detail && (<div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-slate-500">Pasien</span><span className="font-medium">{detail.memberName} ({detail.memberAge} th)</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Username</span><span>@{detail.username}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Wilayah</span><span>{detail.kota || '-'} / {detail.kecamatan || '-'}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Wilayah</span><span className="text-right">{detail.kota || '-'} / {detail.kecamatan || '-'}<br /><span className="text-xs text-slate-400">{detail.kelurahan || '-'}</span></span></div>
             <div className="flex justify-between"><span className="text-slate-500">Instrumen</span><span>{detail.instrumentName}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Tipe</span><span className="font-medium text-red-600">{detail.type}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Kategori Hasil</span><CatBadge cat={detail.category} /></div>
@@ -1045,7 +1078,7 @@ function AdminUsers({ aapi }) {
           <TableRow key={u.id} className={u.status === 'suspended' ? 'bg-red-50/40' : ''}>
             <TableCell className="font-medium">{u.name}</TableCell>
             <TableCell className="text-sm text-slate-500">@{u.username}</TableCell>
-            <TableCell className="text-sm">{u.kota || '-'}<div className="text-xs text-slate-400">{u.kecamatan || '-'}</div></TableCell>
+            <TableCell className="text-sm">{u.kota || '-'}<div className="text-xs text-slate-400">{u.kecamatan || '-'}{u.kelurahan ? ` • ${u.kelurahan}` : ''}</div></TableCell>
             <TableCell className="text-center">{u.memberCount}</TableCell>
             <TableCell className="text-center">{u.assessmentCount}</TableCell>
             <TableCell className="text-center"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{u.status === 'suspended' ? 'Ditangguhkan' : 'Aktif'}</span></TableCell>
@@ -1072,20 +1105,28 @@ function AdminUsers({ aapi }) {
 
 function AdminAdmins({ aapi }) {
   const [admins, setAdmins] = useState([])
-  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'admin_kua', scopeKota: '', scopeKecamatan: '' })
+  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'admin_kua', kota: '', kecamatan: '', kelurahan: '' })
   const [saving, setSaving] = useState(false)
   const load = () => aapi('/admin/admins').then(setAdmins).catch(e => toast.error(e.message))
   useEffect(() => { load() }, [])
+  function scopeValid() {
+    if (form.role === 'admin_pa') return !!form.kota
+    if (form.role === 'admin_kua') return !!form.kota && !!form.kecamatan
+    if (form.role === 'admin_mudin') return !!form.kota && !!form.kecamatan && !!form.kelurahan
+    return false
+  }
   async function submit(e) {
     e.preventDefault()
+    if (!scopeValid()) { toast.error('Lengkapi wilayah tugas admin'); return }
     setSaving(true)
     try {
       const body = { name: form.name, username: form.username, password: form.password, role: form.role }
-      if (form.role === 'admin_kua') body.scopeKecamatan = form.scopeKecamatan
-      if (form.role === 'admin_pa') body.scopeKota = form.scopeKota
+      if (form.role === 'admin_kua') body.scopeKecamatan = form.kecamatan
+      if (form.role === 'admin_pa') body.scopeKota = form.kota
+      if (form.role === 'admin_mudin') body.scopeKelurahan = form.kelurahan
       await aapi('/admin/admins', { method: 'POST', body })
       toast.success('Akun admin dibuat')
-      setForm({ name: '', username: '', password: '', role: 'admin_kua', scopeKota: '', scopeKecamatan: '' })
+      setForm({ name: '', username: '', password: '', role: 'admin_kua', kota: '', kecamatan: '', kelurahan: '' })
       load()
     } catch (e) { toast.error(e.message) } finally { setSaving(false) }
   }
@@ -1093,27 +1134,47 @@ function AdminAdmins({ aapi }) {
     if (u.role === 'super_admin') return
     try { await aapi(`/admin/admins/${u.id}`, { method: 'DELETE' }); toast.success('Akun admin dihapus'); load() } catch (e) { toast.error(e.message) }
   }
+  const needKec = form.role === 'admin_kua' || form.role === 'admin_mudin'
+  const needKel = form.role === 'admin_mudin'
   return (
     <div>
       <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-teal-600" /> Manajemen Akun Admin</h3>
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-1">
-          <CardHeader><CardTitle className="text-base">Buat Admin Mediator</CardTitle><CardDescription>Admin KUA dibatasi per kecamatan, Admin PA dibatasi per kota.</CardDescription></CardHeader>
+          <CardHeader><CardTitle className="text-base">Buat Admin Mediator</CardTitle><CardDescription>KUA per kecamatan, PA per kota, Mudin per kelurahan/desa.</CardDescription></CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-3">
               <div><Label>Nama</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
               <div><Label>Username</Label><Input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="username_admin" required /></div>
               <div><Label>Password</Label><Input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min. 4 karakter" required /></div>
               <div><Label>Peran</Label>
-                <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
+                <Select value={form.role} onValueChange={v => setForm({ ...form, role: v, kota: '', kecamatan: '', kelurahan: '' })}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="admin_kua">Admin Mediator KUA (per Kecamatan)</SelectItem><SelectItem value="admin_pa">Admin Mediator PA (per Kota)</SelectItem></SelectContent>
+                  <SelectContent>
+                    <SelectItem value="admin_kua">Admin Mediator KUA (per Kecamatan)</SelectItem>
+                    <SelectItem value="admin_pa">Admin Mediator PA (per Kota)</SelectItem>
+                    <SelectItem value="admin_mudin">Admin Mediator Mudin (per Kelurahan/Desa)</SelectItem>
+                  </SelectContent>
                 </Select>
               </div>
-              {form.role === 'admin_kua'
-                ? <div><Label>Wilayah Kecamatan</Label><Input value={form.scopeKecamatan} onChange={e => setForm({ ...form, scopeKecamatan: e.target.value })} placeholder="cth: Tembalang" required /></div>
-                : <div><Label>Wilayah Kota / Kabupaten</Label><Input value={form.scopeKota} onChange={e => setForm({ ...form, scopeKota: e.target.value })} placeholder="cth: Kota Semarang" required /></div>}
-              <p className="text-xs text-slate-400">Catatan: nilai wilayah harus sama persis dengan yang diisi user saat mendaftar agar data terfilter dengan benar.</p>
+              <div><Label>Kota / Kabupaten</Label>
+                <Select value={form.kota} onValueChange={v => setForm({ ...form, kota: v, kecamatan: '', kelurahan: '' })}>
+                  <SelectTrigger><SelectValue placeholder="Pilih kota" /></SelectTrigger>
+                  <SelectContent>{KOTA_LIST.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              {needKec && (<div><Label>Kecamatan</Label>
+                <Select value={form.kecamatan} onValueChange={v => setForm({ ...form, kecamatan: v, kelurahan: '' })} disabled={!form.kota}>
+                  <SelectTrigger><SelectValue placeholder={form.kota ? 'Pilih kecamatan' : 'Pilih kota dulu'} /></SelectTrigger>
+                  <SelectContent>{kecamatanOf(form.kota).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>)}
+              {needKel && (<div><Label>Kelurahan / Desa</Label>
+                <Select value={form.kelurahan} onValueChange={v => setForm({ ...form, kelurahan: v })} disabled={!form.kecamatan}>
+                  <SelectTrigger><SelectValue placeholder={form.kecamatan ? 'Pilih kelurahan/desa' : 'Pilih kecamatan dulu'} /></SelectTrigger>
+                  <SelectContent>{kelurahanOf(form.kota, form.kecamatan).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>)}
               <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={saving}>{saving ? 'Menyimpan...' : 'Buat Akun Admin'}</Button>
             </form>
           </CardContent>
@@ -1128,7 +1189,7 @@ function AdminAdmins({ aapi }) {
                   <TableCell className="font-medium">{u.name}</TableCell>
                   <TableCell className="text-sm text-slate-500">@{u.username}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{ROLE_LABEL[u.role] || u.role}</Badge></TableCell>
-                  <TableCell className="text-sm">{u.role === 'admin_kua' ? `Kec. ${u.scopeKecamatan || '-'}` : u.role === 'admin_pa' ? `Kota ${u.scopeKota || '-'}` : 'Semua Wilayah'}</TableCell>
+                  <TableCell className="text-sm">{u.role === 'admin_kua' ? `Kec. ${u.scopeKecamatan || '-'}` : u.role === 'admin_pa' ? `Kota ${u.scopeKota || '-'}` : u.role === 'admin_mudin' ? `Kel/Desa ${u.scopeKelurahan || '-'}` : 'Semua Wilayah'}</TableCell>
                   <TableCell className="text-right">{u.role === 'super_admin' ? <span className="text-xs text-slate-400">—</span> : <Button size="sm" variant="destructive" onClick={() => del(u)}><Trash2 className="h-3.5 w-3.5" /></Button>}</TableCell>
                 </TableRow>))}</TableBody>
             </Table>

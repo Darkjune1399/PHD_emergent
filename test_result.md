@@ -222,16 +222,38 @@ backend_regional_admin:
 
 test_plan:
   current_focus:
-    - "Registration with required address fields (kota, kecamatan, alamat)"
-    - "Regional admin roles (admin_kua/admin_pa) + /admin/admins CRUD + data scoping on stats/alerts"
+    - "All UPDATE 8 features tested and working"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
 
+## ---- UPDATE 8: KELURAHAN/DESA + ADMIN MUDIN ----
+agent_communication:
+    -agent: "main"
+    -message: "NEW: added kelurahan/desa to address + new scoped admin role 'admin_mudin' (scoped by kelurahan). TEST (admin login username 'admin' password 'admin123'): (A) POST /api/auth/register now REQUIRES kelurahan too: {name,username,password,kota,kecamatan,kelurahan,alamat} -> user includes kelurahan; missing kelurahan (or kota/kecamatan/alamat) -> 400 'Kota, kecamatan, kelurahan/desa, dan alamat wajib diisi'. GET /auth/me returns kelurahan. (B) Assessment & alert now denormalize kelurahan: register user kota='Kabupaten Jember', kecamatan='Sumbersari', kelurahan='Antirogo'; add adult member; submit PHQ-9 item9>0 -> alert has kelurahan='Antirogo'. (C) POST /api/admin/admins supports role 'admin_mudin' with scopeKelurahan (missing scopeKelurahan -> 400 'Admin Mudin wajib memiliki wilayah kelurahan/desa'); still supports admin_kua (scopeKecamatan) & admin_pa (scopeKota); invalid role -> 400. (D) SCOPING: login as admin_mudin (scopeKelurahan='Antirogo') -> GET /api/admin/stats only counts Antirogo assessments; GET /api/admin/alerts only Antirogo alerts. super_admin GET /api/admin/stats?kelurahan=Antirogo filters; stats.filters now includes kelurahanList; stats.regionComparison includes byKelurahan. (E) RBAC: admin_mudin gets 200 on /admin/stats & /admin/alerts, 403 on /admin/users, /admin/admins, /admin/instruments."
+    -agent: "testing"
+    -message: "🎉 UPDATE 8 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE - 48/48 tests). Tested 5 major sections with comprehensive scenarios plus 3 regression tests. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ SECTION A - REGISTRATION WITH KELURAHAN: POST /auth/register with kota='Kabupaten Jember', kecamatan='Sumbersari', kelurahan='Antirogo', alamat='Jl. Test 1' returns 200 with user object containing all address fields including kelurahan='Antirogo'. Missing kelurahan returns 400 'Kota, kecamatan, kelurahan/desa, dan alamat wajib diisi'. Missing kota/kecamatan/alamat also returns 400 with same message. GET /auth/me includes kelurahan field. ✅ SECTION B - ALERT DENORMALIZATION WITH KELURAHAN: User registered with kota='Kabupaten Jember', kecamatan='Sumbersari', kelurahan='Antirogo'. Added adult member and submitted PHQ-9 with item9=2 (suicide risk). Alert correctly has kelurahan='Antirogo', kecamatan='Sumbersari', kota='Kabupaten Jember' denormalized. ✅ SECTION C - /admin/admins SUPPORTS ADMIN_MUDIN: POST /admin/admins with role='admin_mudin', scopeKelurahan='Antirogo' returns 200 with admin object (no passwordHash). admin_mudin without scopeKelurahan returns 400 'Admin Mudin wajib memiliki wilayah kelurahan/desa'. Still supports admin_kua (scopeKecamatan='Sumbersari') and admin_pa (scopeKota='Kabupaten Jember'). Invalid role 'admin_x' returns 400. GET /admin/admins lists admins including admin_mudin. DELETE admin_mudin works (200). ✅ SECTION D - KELURAHAN SCOPING: Created 2 users in different kelurahan (Antirogo and Kebonsari, both in Sumbersari kecamatan, Kabupaten Jember) with red-flag assessments. admin_mudin (scopeKelurahan='Antirogo'): GET /admin/stats includes scope with scopeKelurahan='Antirogo', regionComparison, and filters. GET /admin/alerts returns only Antirogo alerts (2 alerts, correctly excludes Kebonsari). super_admin: GET /admin/stats?kelurahan=Antirogo filters correctly; stats.filters.kelurahanList includes ['Antirogo', 'Kebonsari']; stats.regionComparison.byKelurahan is non-empty array. GET /admin/alerts?kelurahan=Kebonsari returns only Kebonsari alerts (1 alert). ✅ SECTION E - RBAC: admin_mudin gets 200 on GET /admin/stats and GET /admin/alerts. admin_mudin gets 403 on GET /admin/users, /admin/admins, /admin/instruments with message 'di luar wilayah tugas Anda'. ✅ REGRESSION TESTS: admin_kua scoping by kecamatan still works (scope.scopeKecamatan='Sumbersari'). admin_pa scoping by kota still works (scope.scopeKota='Kabupaten Jember'). SDQ scoring still accurate (E=0,C=2,H=4,P=4,Pr=0,Total=10). NO ISSUES FOUND. All endpoints working correctly with proper status codes, error messages in Indonesian, kelurahan field present in all responses, data scoping accurate, denormalization working, and RBAC enforcement correct. Backend is production-ready."
+
+backend_kelurahan_mudin:
+  - task: "Kelurahan/desa field + admin_mudin role + kelurahan scoping"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Register requires kelurahan (400 if missing). Assessment/alert denormalize kelurahan. /admin/admins supports admin_mudin (scopeKelurahan). scopeFilterFor/userScopeFilterFor handle admin_mudin->kelurahan. stats adds kelurahanList filter + byKelurahan comparison + ?kelurahan query for super_admin. alerts add ?kelurahan for super_admin. admin_mudin restricted to /admin/stats & /admin/alerts (403 elsewhere)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL UPDATE 8 TESTS PASSED (100% SUCCESS - 48/48 tests). Comprehensive testing completed with 5 major sections + 3 regression tests. SECTION A - REGISTRATION WITH KELURAHAN: POST /auth/register with kota/kecamatan/kelurahan/alamat returns 200 with user object containing kelurahan='Antirogo'. Missing kelurahan returns 400 'Kota, kecamatan, kelurahan/desa, dan alamat wajib diisi'. Missing kota/kecamatan/alamat also returns 400 with same message. GET /auth/me includes kelurahan field. SECTION B - ALERT DENORMALIZATION WITH KELURAHAN: User registered with kota='Kabupaten Jember', kecamatan='Sumbersari', kelurahan='Antirogo'. Submitted PHQ-9 with item9>0 (suicide risk). Alert correctly has kelurahan='Antirogo', kecamatan='Sumbersari', kota='Kabupaten Jember' denormalized. SECTION C - /admin/admins SUPPORTS ADMIN_MUDIN: POST /admin/admins with role='admin_mudin', scopeKelurahan='Antirogo' returns 200 with admin object (no passwordHash). admin_mudin without scopeKelurahan returns 400 'Admin Mudin wajib memiliki wilayah kelurahan/desa'. Still supports admin_kua (scopeKecamatan) and admin_pa (scopeKota). Invalid role 'admin_x' returns 400. GET /admin/admins lists admins including admin_mudin. DELETE admin_mudin works (200). SECTION D - KELURAHAN SCOPING: Created 2 users in different kelurahan (Antirogo and Kebonsari, both in Sumbersari kecamatan) with red-flag assessments. admin_mudin (scopeKelurahan='Antirogo'): GET /admin/stats includes scope with scopeKelurahan='Antirogo', regionComparison, and filters. GET /admin/alerts returns only Antirogo alerts (2 alerts, should NOT include Kebonsari). super_admin: GET /admin/stats?kelurahan=Antirogo filters correctly; stats.filters.kelurahanList includes ['Antirogo', 'Kebonsari']; stats.regionComparison.byKelurahan is non-empty array (1 entry). GET /admin/alerts?kelurahan=Kebonsari returns only Kebonsari alerts (1 alert). SECTION E - RBAC: admin_mudin gets 200 on GET /admin/stats and GET /admin/alerts. admin_mudin gets 403 on GET /admin/users, /admin/admins, /admin/instruments with message 'di luar wilayah tugas Anda'. REGRESSION TESTS: admin_kua scoping by kecamatan still works (scope.scopeKecamatan='Sumbersari'). admin_pa scoping by kota still works (scope.scopeKota='Kabupaten Jember'). SDQ scoring still accurate (E=0,C=2,H=4,P=4,Pr=0,Total=10). NO ISSUES FOUND. All endpoints working correctly with proper status codes, error messages in Indonesian, kelurahan field present in all responses, data scoping accurate, denormalization working, and RBAC enforcement correct. Backend is production-ready."
+
 metadata:
   created_by: "main_agent"
-  version: "1.1"
-  test_sequence: 2
+  version: "1.2"
+  test_sequence: 4
   run_ui: false
 
 
