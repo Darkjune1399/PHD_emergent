@@ -27,7 +27,8 @@ function handleCORS(response) {
 export async function OPTIONS() { return handleCORS(new NextResponse(null, { status: 200 })) }
 
 const JWT_SECRET = process.env.JWT_SECRET || 'psikologi-asesmen-secret-2025'
-const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
+const ADMIN_ROLES = ['super_admin', 'admin_kua', 'admin_pa']
+const SCOPED_ADMIN_ROLES = ['admin_kua', 'admin_pa']
 
 // ================= Auth helpers =================
 function hashPassword(pw) {
@@ -69,6 +70,30 @@ async function getUserFromRequest(request, db) {
   return safe
 }
 function isAdmin(user) { return user && ADMIN_ROLES.includes(user.role) }
+function isSuperAdmin(user) { return user && user.role === 'super_admin' }
+// Region scope for asesmen/alert (denormalized kota/kecamatan)
+function scopeFilterFor(user) {
+  if (user.role === 'admin_kua' && user.scopeKecamatan) return { kecamatan: user.scopeKecamatan }
+  if (user.role === 'admin_pa' && user.scopeKota) return { kota: user.scopeKota }
+  return {}
+}
+// Region scope applied on the users collection
+function userScopeFilterFor(user) {
+  if (user.role === 'admin_kua' && user.scopeKecamatan) return { kecamatan: user.scopeKecamatan }
+  if (user.role === 'admin_pa' && user.scopeKota) return { kota: user.scopeKota }
+  return {}
+}
+// Group a set of assessments by a region field into comparison rows
+function groupRegion(assessments, field) {
+  const map = {}
+  for (const a of assessments) {
+    const key = (a[field] || 'Tidak diketahui')
+    if (!map[key]) map[key] = { name: key, total: 0, Normal: 0, Ambang: 0, Abnormal: 0 }
+    map[key].total++
+    map[key][levelOf(a.result?.overallCategory)]++
+  }
+  return Object.values(map).sort((x, y) => y.total - x.total)
+}
 
 function calcAge(dob) {
   const b = new Date(dob); const now = new Date()
@@ -356,14 +381,15 @@ async function handleRoute(request, { params }) {
 
     // ---------- AUTH ----------
     if (route === '/auth/register' && method === 'POST') {
-      const { name, username, password } = await request.json()
+      const { name, username, password, kota, kecamatan, alamat } = await request.json()
       if (!name || !username || !password) return handleCORS(NextResponse.json({ error: 'Nama, username, dan password wajib diisi' }, { status: 400 }))
+      if (!kota || !kecamatan || !alamat) return handleCORS(NextResponse.json({ error: 'Kota, kecamatan, dan alamat wajib diisi' }, { status: 400 }))
       const existing = await db.collection('users').findOne({ username: username.toLowerCase() })
       if (existing) return handleCORS(NextResponse.json({ error: 'Username sudah digunakan' }, { status: 400 }))
-      const u = { id: uuidv4(), name, username: username.toLowerCase(), passwordHash: hashPassword(password), role: 'user', status: 'active', createdAt: new Date() }
+      const u = { id: uuidv4(), name, username: username.toLowerCase(), passwordHash: hashPassword(password), role: 'user', status: 'active', kota: String(kota).trim(), kecamatan: String(kecamatan).trim(), alamat: String(alamat).trim(), createdAt: new Date() }
       await db.collection('users').insertOne(u)
       const token = signToken({ id: u.id, role: u.role })
-      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role } }))
+      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role, kota: u.kota, kecamatan: u.kecamatan, alamat: u.alamat } }))
     }
     if (route === '/auth/login' && method === 'POST') {
       const { username, password } = await request.json()
@@ -371,7 +397,7 @@ async function handleRoute(request, { params }) {
       if (!u || !verifyPassword(password, u.passwordHash)) return handleCORS(NextResponse.json({ error: 'Username atau password salah' }, { status: 401 }))
       if (u.status === 'suspended') return handleCORS(NextResponse.json({ error: 'Akun Anda ditangguhkan' }, { status: 403 }))
       const token = signToken({ id: u.id, role: u.role })
-      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role } }))
+      return handleCORS(NextResponse.json({ token, user: { id: u.id, name: u.name, username: u.username, role: u.role, kota: u.kota || null, kecamatan: u.kecamatan || null, scopeKota: u.scopeKota || null, scopeKecamatan: u.scopeKecamatan || null } }))
     }
     if (route === '/auth/me' && method === 'GET') {
       const user = await getUserFromRequest(request, db)
@@ -455,11 +481,11 @@ async function handleRoute(request, { params }) {
       const inst = await getInstrument(db, instrumentCode)
       if (!inst) return handleCORS(NextResponse.json({ error: 'Kuesioner tidak valid' }, { status: 400 }))
       const result = computeScore(inst, answers)
-      const assessment = { id: uuidv4(), userId: user.id, username: user.username, memberId, memberName: member.fullName, memberAge: age, memberGender: member.gender, instrumentCode, instrumentName: inst.name, family: inst.family, answers, result, createdAt: new Date() }
+      const assessment = { id: uuidv4(), userId: user.id, username: user.username, kota: user.kota || null, kecamatan: user.kecamatan || null, memberId, memberName: member.fullName, memberAge: age, memberGender: member.gender, instrumentCode, instrumentName: inst.name, family: inst.family, answers, result, createdAt: new Date() }
       await db.collection('assessments').insertOne(assessment)
       if (result.redFlag) {
         const { type, severity } = alertTypeFor(result)
-        await db.collection('alerts').insertOne({ id: uuidv4(), assessmentId: assessment.id, userId: user.id, username: user.username, memberName: member.fullName, memberAge: age, instrumentCode, instrumentName: inst.name, type, severity, category: result.overallCategory, status: 'New', createdAt: new Date() })
+        await db.collection('alerts').insertOne({ id: uuidv4(), assessmentId: assessment.id, userId: user.id, username: user.username, kota: user.kota || null, kecamatan: user.kecamatan || null, memberName: member.fullName, memberAge: age, instrumentCode, instrumentName: inst.name, type, severity, category: result.overallCategory, status: 'New', createdAt: new Date() })
       }
       const { _id, ...clean } = assessment
       return handleCORS(NextResponse.json(clean))
@@ -531,25 +557,62 @@ async function handleRoute(request, { params }) {
       if (!user) return handleCORS(NextResponse.json({ error: 'Unauthorized' }, { status: 401 }))
       if (!isAdmin(user)) return handleCORS(NextResponse.json({ error: 'Akses ditolak (bukan admin)' }, { status: 403 }))
 
+      // Scoped admins (KUA/PA) may ONLY access dashboard stats & red flag alerts
+      const scopedAllowed = route === '/admin/stats' || route === '/admin/alerts' || route.startsWith('/admin/alerts/')
+      if (!isSuperAdmin(user) && !scopedAllowed) return handleCORS(NextResponse.json({ error: 'Akses ditolak (di luar wilayah tugas Anda)' }, { status: 403 }))
+
       if (route === '/admin/stats' && method === 'GET') {
         const url = new URL(request.url); const range = url.searchParams.get('range') || 'daily'
-        const assessments = await db.collection('assessments').find({}).toArray()
+        const qKota = url.searchParams.get('kota'); const qKec = url.searchParams.get('kecamatan')
+        // Base region filter: enforced scope for KUA/PA, manual for super_admin
+        const regionFilter = { ...scopeFilterFor(user) }
+        const userRegionFilter = { ...userScopeFilterFor(user) }
+        if (isSuperAdmin(user)) {
+          if (qKota && qKota !== 'all') { regionFilter.kota = qKota; userRegionFilter.kota = qKota }
+          if (qKec && qKec !== 'all') { regionFilter.kecamatan = qKec; userRegionFilter.kecamatan = qKec }
+        }
+        const assessments = await db.collection('assessments').find(regionFilter).toArray()
         const total = assessments.length
         const dist = { Normal: 0, Ambang: 0, Abnormal: 0 }
         assessments.forEach(a => { dist[levelOf(a.result?.overallCategory)]++ })
         const trend = buildTrend(assessments, range)
-        const alerts = await db.collection('alerts').find({}).toArray()
+        const alerts = await db.collection('alerts').find(regionFilter).toArray()
         const alertStatus = { New: 0, 'Under Review': 0, Referred: 0, Resolved: 0 }
         alerts.forEach(a => { if (a.status in alertStatus) alertStatus[a.status]++ })
-        const totalUsers = await db.collection('users').countDocuments({ role: 'user' })
-        const totalMembers = await db.collection('members').countDocuments()
-        const newFeedback = await db.collection('feedback').countDocuments({ status: 'Baru' })
-        return handleCORS(NextResponse.json({ total, distribution: dist, trend, alertStatus, newAlerts: alertStatus['New'], totalUsers, totalMembers, newFeedback }))
+        const totalUsers = await db.collection('users').countDocuments({ role: 'user', ...userRegionFilter })
+        let memberFilter = {}
+        if (Object.keys(userRegionFilter).length) {
+          const scopedUsers = await db.collection('users').find({ role: 'user', ...userRegionFilter }).project({ id: 1 }).toArray()
+          memberFilter = { userId: { $in: scopedUsers.map(u => u.id) } }
+        }
+        const totalMembers = await db.collection('members').countDocuments(memberFilter)
+        const newFeedback = isSuperAdmin(user) ? await db.collection('feedback').countDocuments({ status: 'Baru' }) : 0
+        // Region comparison tailored to role
+        let regionField = null, byKota = [], byKecamatan = []
+        if (isSuperAdmin(user)) { regionField = qKota && qKota !== 'all' ? 'kecamatan' : 'kota'; byKota = groupRegion(assessments, 'kota'); byKecamatan = groupRegion(assessments, 'kecamatan') }
+        else if (user.role === 'admin_pa') { regionField = 'kecamatan'; byKecamatan = groupRegion(assessments, 'kecamatan') }
+        else if (user.role === 'admin_kua') { regionField = null }
+        // Filter option lists (super_admin only)
+        let kotaList = [], kecamatanList = []
+        if (isSuperAdmin(user)) {
+          kotaList = (await db.collection('users').distinct('kota', { role: 'user', kota: { $nin: [null, ''] } })).sort()
+          const kecFilter = { role: 'user', kecamatan: { $nin: [null, ''] } }
+          if (qKota && qKota !== 'all') kecFilter.kota = qKota
+          kecamatanList = (await db.collection('users').distinct('kecamatan', kecFilter)).sort()
+        }
+        const scope = { role: user.role, scopeKota: user.scopeKota || null, scopeKecamatan: user.scopeKecamatan || null }
+        return handleCORS(NextResponse.json({ total, distribution: dist, trend, alertStatus, newAlerts: alertStatus['New'], totalUsers, totalMembers, newFeedback, scope, regionComparison: { field: regionField, byKota, byKecamatan }, filters: { kotaList, kecamatanList } }))
       }
 
       if (route === '/admin/alerts' && method === 'GET') {
         const url = new URL(request.url); const status = url.searchParams.get('status')
-        const filter = {}; if (status && status !== 'all') filter.status = status
+        const qKota = url.searchParams.get('kota'); const qKec = url.searchParams.get('kecamatan')
+        const filter = { ...scopeFilterFor(user) }
+        if (isSuperAdmin(user)) {
+          if (qKota && qKota !== 'all') filter.kota = qKota
+          if (qKec && qKec !== 'all') filter.kecamatan = qKec
+        }
+        if (status && status !== 'all') filter.status = status
         const list = await db.collection('alerts').find(filter).sort({ createdAt: -1 }).toArray()
         return handleCORS(NextResponse.json(list.map(({ _id, ...a }) => a)))
       }
@@ -626,6 +689,35 @@ async function handleRoute(request, { params }) {
         return handleCORS(NextResponse.json({ ok: true }))
       }
 
+      // ---- Admin account management (super_admin only) ----
+      if (route === '/admin/admins' && method === 'GET') {
+        const admins = await db.collection('users').find({ role: { $in: ADMIN_ROLES } }).sort({ createdAt: 1 }).toArray()
+        return handleCORS(NextResponse.json(admins.map(({ _id, passwordHash, ...a }) => ({ ...a, status: a.status || 'active' }))))
+      }
+      if (route === '/admin/admins' && method === 'POST') {
+        const { name, username, password, role, scopeKota, scopeKecamatan } = await request.json()
+        if (!name || !username || !password) return handleCORS(NextResponse.json({ error: 'Nama, username, dan password wajib diisi' }, { status: 400 }))
+        if (!SCOPED_ADMIN_ROLES.includes(role)) return handleCORS(NextResponse.json({ error: 'Peran admin tidak valid (pilih admin_kua atau admin_pa)' }, { status: 400 }))
+        if (role === 'admin_kua' && !scopeKecamatan) return handleCORS(NextResponse.json({ error: 'Admin KUA wajib memiliki wilayah kecamatan' }, { status: 400 }))
+        if (role === 'admin_pa' && !scopeKota) return handleCORS(NextResponse.json({ error: 'Admin PA wajib memiliki wilayah kota' }, { status: 400 }))
+        const existing = await db.collection('users').findOne({ username: username.toLowerCase() })
+        if (existing) return handleCORS(NextResponse.json({ error: 'Username sudah digunakan' }, { status: 400 }))
+        const doc = { id: uuidv4(), name, username: username.toLowerCase(), passwordHash: hashPassword(password), role, status: 'active', scopeKota: role === 'admin_pa' ? String(scopeKota).trim() : null, scopeKecamatan: role === 'admin_kua' ? String(scopeKecamatan).trim() : null, createdAt: new Date() }
+        await db.collection('users').insertOne(doc)
+        await audit(db, user, 'Buat Akun Admin', `${username} (${role})`)
+        const { _id, passwordHash, ...clean } = doc
+        return handleCORS(NextResponse.json(clean))
+      }
+      if (route.startsWith('/admin/admins/') && method === 'DELETE') {
+        const id = path[2]
+        const target = await db.collection('users').findOne({ id })
+        if (!target) return handleCORS(NextResponse.json({ error: 'Admin tidak ditemukan' }, { status: 404 }))
+        if (target.role === 'super_admin') return handleCORS(NextResponse.json({ error: 'Super admin tidak dapat dihapus' }, { status: 400 }))
+        await db.collection('users').deleteOne({ id })
+        await audit(db, user, 'Hapus Akun Admin', `${target.username}`)
+        return handleCORS(NextResponse.json({ ok: true }))
+      }
+
       // ---- User Management ----
       if (route === '/admin/users' && method === 'GET') {
         const users = await db.collection('users').find({ role: 'user' }).sort({ createdAt: -1 }).toArray()
@@ -644,7 +736,7 @@ async function handleRoute(request, { params }) {
         const target = await db.collection('users').findOne({ id })
         if (!target) return handleCORS(NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 }))
         await db.collection('users').updateOne({ id }, { $set: { passwordHash: hashPassword(newPassword) } })
-        await audit(db, user, 'Reset Password User', `${target.email}`)
+        await audit(db, user, 'Reset Password User', `${target.username}`)
         return handleCORS(NextResponse.json({ ok: true }))
       }
       if (route.startsWith('/admin/users/') && method === 'PATCH') {
@@ -653,7 +745,7 @@ async function handleRoute(request, { params }) {
         const target = await db.collection('users').findOne({ id })
         if (!target) return handleCORS(NextResponse.json({ error: 'User tidak ditemukan' }, { status: 404 }))
         await db.collection('users').updateOne({ id }, { $set: { status } })
-        await audit(db, user, status === 'suspended' ? 'Suspend Akun User' : 'Aktifkan Akun User', `${target.email}`)
+        await audit(db, user, status === 'suspended' ? 'Suspend Akun User' : 'Aktifkan Akun User', `${target.username}`)
         const u = await db.collection('users').findOne({ id })
         const { _id, passwordHash, ...safe } = u
         return handleCORS(NextResponse.json(safe))

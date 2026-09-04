@@ -181,18 +181,59 @@ frontend:
         -agent: "testing"
         -comment: "✅ COMPREHENSIVE UI TESTING COMPLETED. Tested all 6 flows: (1) REGISTRATION - WORKS PERFECTLY, NO ERROR FOUND. User-reported bug 'terjadi kesalahan saat proses pendaftaran' does NOT exist. Registration completes successfully in ~10-15s (cold-compile delay). Dashboard loads with 'Selamat datang' message. (2) LOGIN - Works correctly, user can logout and login with same credentials. (3) ADD FAMILY MEMBERS - Successfully added 3 members (child 6yr, teen 15yr, adult 31yr). Age-based instrument routing 100% accurate: children get SDQ badge, adult gets PHQ9+GHQ12 badges. (4) ASSESSMENT FLOW - Questionnaires load, questions can be answered, results display. Adult member shows instrument selection screen (PHQ-9 vs GHQ-12). (5) RESULT DISPLAY - Result pages show with score breakdowns and recommendations. (6) HISTORY - Assessment history accessible from both result page and dashboard. Minor: Emergency dialog for suicide risk (PHQ-9 item 9) needs verification - test script had selector issues but functionality appears implemented. Overall: ALL CORE FLOWS WORKING. UI is polished, Indonesian language correct, responsive design good."
 
-metadata:
-  created_by: "main_agent"
-  version: "1.0"
-  test_sequence: 1
-  run_ui: false
+## ---- UPDATE 7: ADDRESS FIELDS + REGIONAL ADMIN ROLES (KUA/PA) ----
+agent_communication:
+    -agent: "main"
+    -message: "NEW FEATURE to test. (A) REGISTRATION now REQUIRES address fields: POST /api/auth/register {name,username,password,kota,kecamatan,alamat} -> {token,user{kota,kecamatan,alamat}}; missing any of kota/kecamatan/alamat -> 400 'Kota, kecamatan, dan alamat wajib diisi'; duplicate username -> 400. (B) ASSESSMENT/ALERT denormalization: after a user with kota/kecamatan submits an assessment that triggers a red flag (e.g., PHQ-9 item9>0), the alert doc AND assessment doc must contain kota & kecamatan matching the user. (C) REGIONAL ADMIN ROLES: super_admin can create scoped admins via POST /api/admin/admins {name,username,password,role,scopeKota|scopeKecamatan}. role must be 'admin_kua' (needs scopeKecamatan) or 'admin_pa' (needs scopeKota); invalid role -> 400; missing scope -> 400; duplicate username -> 400. GET /api/admin/admins lists admins. DELETE /api/admin/admins/:id removes (cannot delete super_admin -> 400). (D) SCOPING: login as an admin_kua (scopeKecamatan=X) then GET /api/admin/stats must only reflect assessments where kecamatan=X; GET /api/admin/alerts only alerts with kecamatan=X. admin_pa (scopeKota=Y) scoped by kota=Y. super_admin sees all + can pass ?kota=&kecamatan= to filter. stats response now includes {scope, regionComparison:{field,byKota,byKecamatan}, filters:{kotaList,kecamatanList}}. (E) RBAC: scoped admin (admin_kua/admin_pa) must get 403 on non-allowed admin routes like GET /api/admin/users, /api/admin/admins, /api/admin/instruments (only /admin/stats and /admin/alerts* allowed). normal user -> 403 on all /admin/*. Setup: register 2 users in different kota/kecamatan, submit red-flag assessments for each, create admin_kua & admin_pa via super_admin, then verify scoping. Admin login: username 'admin' password 'admin123'."
+    -agent: "testing"
+    -message: "🎉 UPDATE 7 BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE - 54/54 tests). Tested 5 major sections with comprehensive scenarios. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ SECTION A - REGISTRATION WITH ADDRESS FIELDS: POST /auth/register with kota/kecamatan/alamat returns 200 with user object containing all address fields. Missing kota/kecamatan/alamat returns 400 'Kota, kecamatan, dan alamat wajib diisi'. Duplicate username returns 400. GET /auth/me includes address fields. ✅ SECTION B - ALERT DENORMALIZATION: User registered with kota='Kota Semarang', kecamatan='Tembalang'. Submitted PHQ-9 with item9>0 (suicide risk). Alert correctly has kota='Kota Semarang' and kecamatan='Tembalang' denormalized. ✅ SECTION C - /admin/admins CRUD: POST /admin/admins creates admin_kua with scopeKecamatan and admin_pa with scopeKota (200, no passwordHash in response). Invalid role returns 400. Missing scope returns 400. Duplicate username returns 400. GET /admin/admins lists all admin types. DELETE scoped admin works (200). DELETE super_admin returns 400. ✅ SECTION D - DATA SCOPING: Created 2 users in different regions (Tembalang/Semarang and Jebres/Solo) with red-flag assessments. admin_kua (scopeKecamatan='Tembalang'): GET /admin/stats includes scope/regionComparison/filters; GET /admin/alerts returns only Tembalang alerts (2/2). admin_pa (scopeKota='Kota Semarang'): GET /admin/stats includes scope; GET /admin/alerts returns only Kota Semarang alerts (2/2). super_admin: GET /admin/stats?kota=Kota%20Solo includes kotaList; GET /admin/alerts?kecamatan=Jebres filters correctly (1 alert). ✅ SECTION E - RBAC: Scoped admin gets 403 on /admin/users, /admin/admins, /admin/instruments ('di luar wilayah tugas Anda'). Scoped admin gets 200 on /admin/stats and /admin/alerts. Normal user gets 403 on all /admin/* routes ('bukan admin'). ✅ REGRESSION: SDQ scoring still accurate (E=0,C=2,H=4,P=4,Pr=0,Total=10). NO ISSUES FOUND. All endpoints working correctly with proper status codes, error messages in Indonesian, data scoping, denormalization, and RBAC enforcement. Backend is production-ready."
+
+backend_address_registration:
+  - task: "Registration with required address fields (kota, kecamatan, alamat)"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "POST /auth/register now requires kota, kecamatan, alamat (400 if missing). Stored on user; returned in register response user object. Login/me responses include kota/kecamatan/scopeKota/scopeKecamatan."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL REGISTRATION WITH ADDRESS FIELDS TESTS PASSED (100% SUCCESS). Comprehensive testing with 6 test scenarios. REGISTRATION FULLY WORKING: (1) POST /auth/register with {name, username, password, kota, kecamatan, alamat} returns 200 with {token, user} where user contains kota='Kota Semarang', kecamatan='Tembalang', alamat='Jl. Test No. 123'. (2) Missing kota correctly returns 400 'Kota, kecamatan, dan alamat wajib diisi'. (3) Missing kecamatan correctly returns 400 'Kota, kecamatan, dan alamat wajib diisi'. (4) Missing alamat correctly returns 400 'Kota, kecamatan, dan alamat wajib diisi'. (5) Duplicate username correctly returns 400 'Username sudah digunakan'. (6) GET /auth/me with new user token returns user object including kota, kecamatan, alamat fields. All status codes correct, all error messages in Indonesian, address fields present in all responses. NO ISSUES FOUND."
+
+backend_regional_admin:
+  - task: "Regional admin roles (admin_kua/admin_pa) + /admin/admins CRUD + data scoping on stats/alerts"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "ADMIN_ROLES=['super_admin','admin_kua','admin_pa']. Assessments/alerts now denormalize kota/kecamatan. /admin/stats & /admin/alerts filter by scope (admin_kua->kecamatan, admin_pa->kota, super_admin->all with optional ?kota/?kecamatan). stats returns scope, regionComparison{field,byKota,byKecamatan}, filters{kotaList,kecamatanList}. New endpoints GET/POST/DELETE /admin/admins (super_admin only). Scoped admins limited to /admin/stats and /admin/alerts* (403 elsewhere)."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL REGIONAL ADMIN + DATA SCOPING + RBAC TESTS PASSED (100% SUCCESS - 48 test scenarios). SECTION B - ALERT DENORMALIZATION: (1) Created user with kota='Kota Semarang', kecamatan='Tembalang'. (2) Added adult member and submitted PHQ-9 with item9=2 (suicide risk). (3) Alert created with kota='Kota Semarang' and kecamatan='Tembalang' correctly denormalized. SECTION C - /admin/admins CRUD: (1) POST /admin/admins with role='admin_kua', scopeKecamatan='Tembalang' returns 200 with admin object (no passwordHash). (2) POST with role='admin_pa', scopeKota='Kota Semarang' returns 200. (3) Invalid role 'admin_medis' returns 400. (4) admin_kua without scopeKecamatan returns 400. (5) admin_pa without scopeKota returns 400. (6) Duplicate username returns 400. (7) GET /admin/admins lists all admin types (super_admin, admin_kua, admin_pa). (8) DELETE scoped admin returns 200. (9) DELETE super_admin returns 400. SECTION D - DATA SCOPING: (1) Registered 2 users in different regions (Tembalang/Semarang and Jebres/Solo), added members, submitted red-flag assessments. (2) Created admin_kua (scopeKecamatan='Tembalang') and admin_pa (scopeKota='Kota Semarang'). (3) Login as admin_kua: GET /admin/stats includes scope/regionComparison/filters fields. GET /admin/alerts returns only Tembalang alerts (2 alerts, all from Tembalang). (4) Login as admin_pa: GET /admin/stats includes scope. GET /admin/alerts returns only Kota Semarang alerts (2 alerts, all from Kota Semarang). (5) As super_admin: GET /admin/stats?kota=Kota%20Solo includes kotaList=['Kota Semarang', 'Kota Solo']. GET /admin/alerts?kecamatan=Jebres filters to 1 Jebres alert. SECTION E - RBAC: (1) Scoped admin (admin_kua) gets 403 on GET /admin/users, /admin/admins, /admin/instruments with message 'di luar wilayah tugas Anda'. (2) Scoped admin gets 200 on GET /admin/stats and /admin/alerts. (3) Normal user gets 403 on GET /admin/stats and POST /admin/admins with message 'bukan admin'. REGRESSION: SDQ scoring still accurate (E=0,C=2,H=4,P=4,Pr=0,Total=10). All 54 tests passed. NO ISSUES FOUND."
 
 test_plan:
-  current_focus: []
+  current_focus:
+    - "Registration with required address fields (kota, kecamatan, alamat)"
+    - "Regional admin roles (admin_kua/admin_pa) + /admin/admins CRUD + data scoping on stats/alerts"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
-  completed: true
+
+metadata:
+  created_by: "main_agent"
+  version: "1.1"
+  test_sequence: 2
+  run_ui: false
+
 
 agent_communication:
     -agent: "main"

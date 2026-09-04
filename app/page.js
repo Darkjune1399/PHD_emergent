@@ -17,10 +17,10 @@ import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video } from 'lucide-react'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video, MapPin, BarChart3 } from 'lucide-react'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
-const ADMIN_ROLES = ['super_admin', 'admin_medis', 'admin_teknis']
+const ADMIN_ROLES = ['super_admin', 'admin_kua', 'admin_pa']
 function isAdminRole(role) { return ADMIN_ROLES.includes(role) }
 
 function api(path, { method = 'GET', body, token } = {}) {
@@ -71,7 +71,7 @@ export default function App() {
   const [loading, setLoading] = useState(false)
 
   const [authMode, setAuthMode] = useState('login')
-  const [af, setAf] = useState({ name: '', username: '', password: '' })
+  const [af, setAf] = useState({ name: '', username: '', password: '', kota: '', kecamatan: '', alamat: '' })
 
   const [memberDialog, setMemberDialog] = useState(false)
   const [editingMember, setEditingMember] = useState(null)
@@ -342,6 +342,13 @@ function AuthScreen({ authMode, setAuthMode, af, setAf, handleAuth, loading, onB
                 {authMode === 'register' && (<div><Label>Nama Lengkap</Label><Input value={af.name} onChange={e => setAf({ ...af, name: e.target.value })} placeholder="Nama Anda" required /></div>)}
                 <div><Label>Username</Label><Input value={af.username} onChange={e => setAf({ ...af, username: e.target.value })} placeholder="username_anda" required /></div>
                 <div><Label>Password</Label><Input type="password" value={af.password} onChange={e => setAf({ ...af, password: e.target.value })} placeholder="********" required /></div>
+                {authMode === 'register' && (<>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Kota / Kabupaten</Label><Input value={af.kota} onChange={e => setAf({ ...af, kota: e.target.value })} placeholder="cth: Kota Semarang" required /></div>
+                    <div><Label>Kecamatan</Label><Input value={af.kecamatan} onChange={e => setAf({ ...af, kecamatan: e.target.value })} placeholder="cth: Tembalang" required /></div>
+                  </div>
+                  <div><Label>Alamat Lengkap</Label><Textarea value={af.alamat} onChange={e => setAf({ ...af, alamat: e.target.value })} placeholder="Nama jalan, nomor rumah, RT/RW, kelurahan" required /></div>
+                </>)}
                 <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={loading}>{loading ? 'Memproses...' : (authMode === 'login' ? 'Masuk' : 'Daftar')}</Button>
                 {loading && <p className="text-xs text-slate-500 text-center">Mohon tunggu, permintaan pertama bisa memerlukan 10-15 detik...</p>}
               </form>
@@ -675,7 +682,7 @@ function FeedbackDialog({ open, onClose, token }) {
 }
 
 // ==================== ADMIN PANEL ====================
-const ROLE_LABEL = { super_admin: 'Super Admin', admin_medis: 'Admin Medis / Psikolog', admin_teknis: 'Admin Teknis' }
+const ROLE_LABEL = { super_admin: 'Super Admin', admin_kua: 'Admin Mediator KUA', admin_pa: 'Admin Mediator PA' }
 const SEV_CLS = { Kritis: 'bg-red-600 text-white', Tinggi: 'bg-red-100 text-red-700 border-red-200', Sedang: 'bg-amber-100 text-amber-700 border-amber-200' }
 const STATUS_CLS = { New: 'bg-red-100 text-red-700', 'Under Review': 'bg-amber-100 text-amber-700', Referred: 'bg-blue-100 text-blue-700', Resolved: 'bg-emerald-100 text-emerald-700' }
 const SUB_NAMES_CLIENT = { E: 'Emosional (E)', C: 'Perilaku (C)', H: 'Hiperaktivitas (H)', P: 'Teman Sebaya (P)' }
@@ -683,6 +690,8 @@ const SUB_NAMES_CLIENT = { E: 'Emosional (E)', C: 'Perilaku (C)', H: 'Hiperaktiv
 function AdminPanel({ user, token, logout }) {
   const [tab, setTab] = useState('dashboard')
   const aapi = (path, opts = {}) => api(path, { ...opts, token })
+  const isSuper = user.role === 'super_admin'
+  const scopeText = user.role === 'admin_kua' ? `Kecamatan ${user.scopeKecamatan || '-'}` : user.role === 'admin_pa' ? `Kota ${user.scopeKota || '-'}` : null
   return (
     <div className="min-h-screen bg-slate-50">
       <Toaster position="top-center" richColors />
@@ -699,27 +708,35 @@ function AdminPanel({ user, token, logout }) {
         </div>
       </header>
       <div className="container py-6">
+        {scopeText && (
+          <div className="mb-4 flex items-center gap-2 rounded-lg border border-teal-200 bg-teal-50 px-4 py-2.5 text-sm text-teal-800">
+            <MapPin className="h-4 w-4 text-teal-600" />
+            <span>Anda melihat data khusus wilayah tugas: <span className="font-semibold">{scopeText}</span></span>
+          </div>
+        )}
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-6 flex-wrap h-auto">
             <TabsTrigger value="dashboard"><LayoutDashboard className="h-4 w-4 mr-1" /> Dashboard</TabsTrigger>
             <TabsTrigger value="alerts"><Bell className="h-4 w-4 mr-1" /> Red Flag Alerts</TabsTrigger>
-            <TabsTrigger value="kuesioner"><ListChecks className="h-4 w-4 mr-1" /> Master Kuesioner</TabsTrigger>
-            <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>
-            <TabsTrigger value="users"><UserCog className="h-4 w-4 mr-1" /> Manajemen User</TabsTrigger>
-            <TabsTrigger value="rujukan"><BookUser className="h-4 w-4 mr-1" /> Rujukan</TabsTrigger>
-            <TabsTrigger value="artikel"><FileText className="h-4 w-4 mr-1" /> Artikel</TabsTrigger>
-            <TabsTrigger value="feedback"><MessageSquare className="h-4 w-4 mr-1" /> Feedback</TabsTrigger>
-            <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>
+            {isSuper && <TabsTrigger value="admins"><ShieldCheck className="h-4 w-4 mr-1" /> Manajemen Admin</TabsTrigger>}
+            {isSuper && <TabsTrigger value="kuesioner"><ListChecks className="h-4 w-4 mr-1" /> Master Kuesioner</TabsTrigger>}
+            {isSuper && <TabsTrigger value="usia"><Settings className="h-4 w-4 mr-1" /> Aturan Usia</TabsTrigger>}
+            {isSuper && <TabsTrigger value="users"><UserCog className="h-4 w-4 mr-1" /> Manajemen User</TabsTrigger>}
+            {isSuper && <TabsTrigger value="rujukan"><BookUser className="h-4 w-4 mr-1" /> Rujukan</TabsTrigger>}
+            {isSuper && <TabsTrigger value="artikel"><FileText className="h-4 w-4 mr-1" /> Artikel</TabsTrigger>}
+            {isSuper && <TabsTrigger value="feedback"><MessageSquare className="h-4 w-4 mr-1" /> Feedback</TabsTrigger>}
+            {isSuper && <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>}
           </TabsList>
-          <TabsContent value="dashboard"><AdminDashboard aapi={aapi} /></TabsContent>
-          <TabsContent value="alerts"><AdminAlerts aapi={aapi} /></TabsContent>
-          <TabsContent value="kuesioner"><AdminInstruments aapi={aapi} /></TabsContent>
-          <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>
-          <TabsContent value="users"><AdminUsers aapi={aapi} /></TabsContent>
-          <TabsContent value="rujukan"><AdminReferrals aapi={aapi} /></TabsContent>
-          <TabsContent value="artikel"><AdminArticles aapi={aapi} /></TabsContent>
-          <TabsContent value="feedback"><AdminFeedback aapi={aapi} /></TabsContent>
-          <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>
+          <TabsContent value="dashboard"><AdminDashboard aapi={aapi} isSuper={isSuper} /></TabsContent>
+          <TabsContent value="alerts"><AdminAlerts aapi={aapi} isSuper={isSuper} /></TabsContent>
+          {isSuper && <TabsContent value="admins"><AdminAdmins aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="kuesioner"><AdminInstruments aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="usia"><AdminAgeRules aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="users"><AdminUsers aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="rujukan"><AdminReferrals aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="artikel"><AdminArticles aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="feedback"><AdminFeedback aapi={aapi} /></TabsContent>}
+          {isSuper && <TabsContent value="log"><AdminLogs aapi={aapi} /></TabsContent>}
         </Tabs>
       </div>
     </div>
@@ -730,23 +747,46 @@ function StatCard({ icon, label, value, cls }) {
   return <Card><CardContent className="py-5 flex items-center gap-4"><div className={`rounded-lg p-3 ${cls}`}>{icon}</div><div><div className="text-2xl font-bold text-slate-800">{value}</div><div className="text-sm text-slate-500">{label}</div></div></CardContent></Card>
 }
 
-function AdminDashboard({ aapi }) {
+function AdminDashboard({ aapi, isSuper }) {
   const [stats, setStats] = useState(null)
   const [range, setRange] = useState('daily')
+  const [kotaFilter, setKotaFilter] = useState('all')
+  const [kecFilter, setKecFilter] = useState('all')
+  const [compareBy, setCompareBy] = useState('kota')
   useEffect(() => {
     let active = true
-    const load = () => aapi(`/admin/stats?range=${range}`).then(d => { if (active) setStats(d) }).catch(() => {})
+    const qs = `range=${range}&kota=${encodeURIComponent(kotaFilter)}&kecamatan=${encodeURIComponent(kecFilter)}`
+    const load = () => aapi(`/admin/stats?${qs}`).then(d => { if (active) { setStats(d); if (d?.regionComparison?.field) setCompareBy(d.regionComparison.field) } }).catch(() => {})
     load(); const t = setInterval(load, 15000)
     return () => { active = false; clearInterval(t) }
-  }, [range])
+  }, [range, kotaFilter, kecFilter])
   if (!stats) return <div className="text-slate-500">Memuat statistik...</div>
   const distData = [
     { name: 'Normal', value: stats.distribution.Normal, fill: '#10b981' },
     { name: 'Ambang', value: stats.distribution.Ambang, fill: '#f59e0b' },
     { name: 'Abnormal', value: stats.distribution.Abnormal, fill: '#ef4444' },
   ]
+  const rc = stats.regionComparison || { field: null, byKota: [], byKecamatan: [] }
+  const compareData = (compareBy === 'kecamatan' ? rc.byKecamatan : rc.byKota) || []
+  const showCompare = !!rc.field
   return (
     <div className="space-y-6">
+      {isSuper && (
+        <Card className="border-teal-100">
+          <CardContent className="py-4 flex flex-wrap items-center gap-3">
+            <span className="text-sm font-medium text-slate-600 flex items-center gap-1"><MapPin className="h-4 w-4 text-teal-600" /> Filter Wilayah:</span>
+            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all') }}>
+              <SelectTrigger className="w-52 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kota / Kabupaten</SelectItem>{(stats.filters?.kotaList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={kecFilter} onValueChange={setKecFilter}>
+              <SelectTrigger className="w-52 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{(stats.filters?.kecamatanList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            {(kotaFilter !== 'all' || kecFilter !== 'all') && <Button variant="ghost" size="sm" onClick={() => { setKotaFilter('all'); setKecFilter('all') }}>Reset</Button>}
+          </CardContent>
+        </Card>
+      )}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard icon={<ClipboardList className="h-6 w-6 text-teal-600" />} label="Total Asesmen" value={stats.total} cls="bg-teal-100" />
         <StatCard icon={<ShieldAlert className="h-6 w-6 text-red-600" />} label="Alert Baru (belum ditangani)" value={stats.newAlerts} cls="bg-red-100" />
@@ -761,6 +801,39 @@ function AdminDashboard({ aapi }) {
           <CardContent><div style={{ width: '100%', height: 240 }}><ResponsiveContainer><BarChart data={distData}><CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" /><XAxis dataKey="name" fontSize={11} /><YAxis fontSize={11} allowDecimals={false} /><Tooltip /><Bar dataKey="value" radius={[6, 6, 0, 0]}>{distData.map((e, i) => <Cell key={i} fill={e.fill} />)}</Bar></BarChart></ResponsiveContainer></div></CardContent>
         </Card>
       </div>
+      {showCompare && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-base flex items-center gap-2"><BarChart3 className="h-5 w-5 text-teal-600" /> Perbandingan Antar Wilayah</CardTitle>
+              {isSuper && (
+                <Select value={compareBy} onValueChange={setCompareBy}>
+                  <SelectTrigger className="w-40 h-8 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="kota">Antar Kota</SelectItem><SelectItem value="kecamatan">Antar Kecamatan</SelectItem></SelectContent>
+                </Select>
+              )}
+            </div>
+            <CardDescription>Komposisi kategori hasil asesmen ({compareBy === 'kecamatan' ? 'per kecamatan' : 'per kota'}). Ditampilkan maksimal 10 wilayah dengan asesmen terbanyak.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {compareData.length === 0 ? <div className="text-sm text-slate-400 py-8 text-center">Belum ada data wilayah.</div> : (
+              <div style={{ width: '100%', height: Math.max(240, Math.min(compareData.length, 10) * 42) }}>
+                <ResponsiveContainer>
+                  <BarChart data={compareData.slice(0, 10)} layout="vertical" margin={{ left: 20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                    <XAxis type="number" fontSize={11} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" fontSize={11} width={120} />
+                    <Tooltip />
+                    <Bar dataKey="Normal" stackId="a" fill="#10b981" />
+                    <Bar dataKey="Ambang" stackId="a" fill="#f59e0b" />
+                    <Bar dataKey="Abnormal" stackId="a" fill="#ef4444" radius={[0, 6, 6, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
       <Card><CardHeader><CardTitle className="text-base">Status Penanganan Alert</CardTitle></CardHeader>
         <CardContent className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {Object.entries(stats.alertStatus).map(([k, v]) => (<div key={k} className={`rounded-lg p-3 text-center ${STATUS_CLS[k]}`}><div className="text-2xl font-bold">{v}</div><div className="text-xs">{k}</div></div>))}
@@ -770,9 +843,11 @@ function AdminDashboard({ aapi }) {
   )
 }
 
-function AdminAlerts({ aapi }) {
+function AdminAlerts({ aapi, isSuper }) {
   const [alerts, setAlerts] = useState([])
   const [filter, setFilter] = useState('all')
+  const [kotaFilter, setKotaFilter] = useState('all')
+  const [kecFilter, setKecFilter] = useState('all')
   const [detail, setDetail] = useState(null)
   const load = () => aapi(`/admin/alerts?status=${filter}`).then(setAlerts).catch(e => toast.error(e.message))
   useEffect(() => { load(); const t = setInterval(load, 15000); return () => clearInterval(t) }, [filter])
@@ -780,23 +855,31 @@ function AdminAlerts({ aapi }) {
     try { await aapi(`/admin/alerts/${id}`, { method: 'PATCH', body: { status } }); toast.success('Status diperbarui'); load() } catch (e) { toast.error(e.message) }
   }
   async function openDetail(id) { try { const d = await aapi(`/admin/alerts/${id}`); setDetail(d) } catch (e) { toast.error(e.message) } }
+  const kotaOpts = useMemo(() => Array.from(new Set(alerts.map(a => a.kota).filter(Boolean))).sort(), [alerts])
+  const kecOpts = useMemo(() => Array.from(new Set(alerts.filter(a => kotaFilter === 'all' || a.kota === kotaFilter).map(a => a.kecamatan).filter(Boolean))).sort(), [alerts, kotaFilter])
+  const shown = alerts.filter(a => (kotaFilter === 'all' || a.kota === kotaFilter) && (kecFilter === 'all' || a.kecamatan === kecFilter))
   return (
     <div>
       <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <div><h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ShieldAlert className="h-5 w-5 text-red-600" /> Red Flag Alert System</h3><p className="text-sm text-slate-500">Diperbarui otomatis tiap 15 detik.</p></div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {isSuper && (<>
+            <Select value={kotaFilter} onValueChange={v => { setKotaFilter(v); setKecFilter('all') }}><SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kota</SelectItem>{kotaOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+            <Select value={kecFilter} onValueChange={setKecFilter}><SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger><SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{kecOpts.map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent></Select>
+          </>)}
           <Select value={filter} onValueChange={setFilter}><SelectTrigger className="w-44"><SelectValue /></SelectTrigger><SelectContent>{['all', 'New', 'Under Review', 'Referred', 'Resolved'].map(s => <SelectItem key={s} value={s}>{s === 'all' ? 'Semua Status' : s}</SelectItem>)}</SelectContent></Select>
           <Button variant="outline" size="sm" onClick={load}><RefreshCw className="h-4 w-4" /></Button>
         </div>
       </div>
       <Card><CardContent className="p-0">
         <Table>
-          <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Pasien</TableHead><TableHead>Instrumen</TableHead><TableHead>Tipe Risiko</TableHead><TableHead className="text-center">Severity</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
+          <TableHeader><TableRow><TableHead>Waktu</TableHead><TableHead>Pasien</TableHead><TableHead>Wilayah</TableHead><TableHead>Instrumen</TableHead><TableHead>Tipe Risiko</TableHead><TableHead className="text-center">Severity</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
           <TableBody>
-            {alerts.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">Tidak ada alert.</TableCell></TableRow>) : alerts.map(a => (
+            {shown.length === 0 ? (<TableRow><TableCell colSpan={8} className="text-center text-slate-400 py-8">Tidak ada alert.</TableCell></TableRow>) : shown.map(a => (
               <TableRow key={a.id} className={a.status === 'New' ? 'bg-red-50/40' : ''}>
                 <TableCell className="text-xs whitespace-nowrap">{new Date(a.createdAt).toLocaleString('id-ID')}</TableCell>
                 <TableCell className="text-sm font-medium">{a.memberName}<div className="text-xs text-slate-400">{a.memberAge} th • @{a.username}</div></TableCell>
+                <TableCell className="text-sm">{a.kota || '-'}<div className="text-xs text-slate-400">{a.kecamatan || '-'}</div></TableCell>
                 <TableCell className="text-sm">{a.instrumentName}</TableCell>
                 <TableCell className="text-sm">{a.type}</TableCell>
                 <TableCell className="text-center"><span className={`inline-flex rounded-full border px-2 py-0.5 text-xs font-semibold ${SEV_CLS[a.severity] || 'bg-slate-100'}`}>{a.severity}</span></TableCell>
@@ -813,6 +896,7 @@ function AdminAlerts({ aapi }) {
           {detail && (<div className="space-y-2 text-sm">
             <div className="flex justify-between"><span className="text-slate-500">Pasien</span><span className="font-medium">{detail.memberName} ({detail.memberAge} th)</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Username</span><span>@{detail.username}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">Wilayah</span><span>{detail.kota || '-'} / {detail.kecamatan || '-'}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Instrumen</span><span>{detail.instrumentName}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Tipe</span><span className="font-medium text-red-600">{detail.type}</span></div>
             <div className="flex justify-between"><span className="text-slate-500">Kategori Hasil</span><CatBadge cat={detail.category} /></div>
@@ -956,11 +1040,12 @@ function AdminUsers({ aapi }) {
     <div>
       <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><UserCog className="h-5 w-5 text-teal-600" /> Manajemen User</h3>
       <Card><CardContent className="p-0"><Table>
-        <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Username</TableHead><TableHead className="text-center">Anggota</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
-        <TableBody>{users.length === 0 ? (<TableRow><TableCell colSpan={6} className="text-center text-slate-400 py-8">Belum ada user terdaftar.</TableCell></TableRow>) : users.map(u => (
+        <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Username</TableHead><TableHead>Wilayah</TableHead><TableHead className="text-center">Anggota</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead className="text-center">Status</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+        <TableBody>{users.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center text-slate-400 py-8">Belum ada user terdaftar.</TableCell></TableRow>) : users.map(u => (
           <TableRow key={u.id} className={u.status === 'suspended' ? 'bg-red-50/40' : ''}>
             <TableCell className="font-medium">{u.name}</TableCell>
             <TableCell className="text-sm text-slate-500">@{u.username}</TableCell>
+            <TableCell className="text-sm">{u.kota || '-'}<div className="text-xs text-slate-400">{u.kecamatan || '-'}</div></TableCell>
             <TableCell className="text-center">{u.memberCount}</TableCell>
             <TableCell className="text-center">{u.assessmentCount}</TableCell>
             <TableCell className="text-center"><span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${u.status === 'suspended' ? 'bg-red-100 text-red-700' : 'bg-emerald-100 text-emerald-700'}`}>{u.status === 'suspended' ? 'Ditangguhkan' : 'Aktif'}</span></TableCell>
@@ -981,6 +1066,75 @@ function AdminUsers({ aapi }) {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+function AdminAdmins({ aapi }) {
+  const [admins, setAdmins] = useState([])
+  const [form, setForm] = useState({ name: '', username: '', password: '', role: 'admin_kua', scopeKota: '', scopeKecamatan: '' })
+  const [saving, setSaving] = useState(false)
+  const load = () => aapi('/admin/admins').then(setAdmins).catch(e => toast.error(e.message))
+  useEffect(() => { load() }, [])
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    try {
+      const body = { name: form.name, username: form.username, password: form.password, role: form.role }
+      if (form.role === 'admin_kua') body.scopeKecamatan = form.scopeKecamatan
+      if (form.role === 'admin_pa') body.scopeKota = form.scopeKota
+      await aapi('/admin/admins', { method: 'POST', body })
+      toast.success('Akun admin dibuat')
+      setForm({ name: '', username: '', password: '', role: 'admin_kua', scopeKota: '', scopeKecamatan: '' })
+      load()
+    } catch (e) { toast.error(e.message) } finally { setSaving(false) }
+  }
+  async function del(u) {
+    if (u.role === 'super_admin') return
+    try { await aapi(`/admin/admins/${u.id}`, { method: 'DELETE' }); toast.success('Akun admin dihapus'); load() } catch (e) { toast.error(e.message) }
+  }
+  return (
+    <div>
+      <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-teal-600" /> Manajemen Akun Admin</h3>
+      <div className="grid gap-6 lg:grid-cols-3">
+        <Card className="lg:col-span-1">
+          <CardHeader><CardTitle className="text-base">Buat Admin Mediator</CardTitle><CardDescription>Admin KUA dibatasi per kecamatan, Admin PA dibatasi per kota.</CardDescription></CardHeader>
+          <CardContent>
+            <form onSubmit={submit} className="space-y-3">
+              <div><Label>Nama</Label><Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} required /></div>
+              <div><Label>Username</Label><Input value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="username_admin" required /></div>
+              <div><Label>Password</Label><Input type="text" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="Min. 4 karakter" required /></div>
+              <div><Label>Peran</Label>
+                <Select value={form.role} onValueChange={v => setForm({ ...form, role: v })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent><SelectItem value="admin_kua">Admin Mediator KUA (per Kecamatan)</SelectItem><SelectItem value="admin_pa">Admin Mediator PA (per Kota)</SelectItem></SelectContent>
+                </Select>
+              </div>
+              {form.role === 'admin_kua'
+                ? <div><Label>Wilayah Kecamatan</Label><Input value={form.scopeKecamatan} onChange={e => setForm({ ...form, scopeKecamatan: e.target.value })} placeholder="cth: Tembalang" required /></div>
+                : <div><Label>Wilayah Kota / Kabupaten</Label><Input value={form.scopeKota} onChange={e => setForm({ ...form, scopeKota: e.target.value })} placeholder="cth: Kota Semarang" required /></div>}
+              <p className="text-xs text-slate-400">Catatan: nilai wilayah harus sama persis dengan yang diisi user saat mendaftar agar data terfilter dengan benar.</p>
+              <Button type="submit" className="w-full bg-teal-600 hover:bg-teal-700" disabled={saving}>{saving ? 'Menyimpan...' : 'Buat Akun Admin'}</Button>
+            </form>
+          </CardContent>
+        </Card>
+        <Card className="lg:col-span-2">
+          <CardHeader><CardTitle className="text-base">Daftar Admin</CardTitle></CardHeader>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Username</TableHead><TableHead>Peran</TableHead><TableHead>Wilayah Tugas</TableHead><TableHead className="text-right">Aksi</TableHead></TableRow></TableHeader>
+              <TableBody>{admins.map(u => (
+                <TableRow key={u.id}>
+                  <TableCell className="font-medium">{u.name}</TableCell>
+                  <TableCell className="text-sm text-slate-500">@{u.username}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{ROLE_LABEL[u.role] || u.role}</Badge></TableCell>
+                  <TableCell className="text-sm">{u.role === 'admin_kua' ? `Kec. ${u.scopeKecamatan || '-'}` : u.role === 'admin_pa' ? `Kota ${u.scopeKota || '-'}` : 'Semua Wilayah'}</TableCell>
+                  <TableCell className="text-right">{u.role === 'super_admin' ? <span className="text-xs text-slate-400">—</span> : <Button size="sm" variant="destructive" onClick={() => del(u)}><Trash2 className="h-3.5 w-3.5" /></Button>}</TableCell>
+                </TableRow>))}</TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }
