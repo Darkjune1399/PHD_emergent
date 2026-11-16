@@ -545,3 +545,147 @@ agent_communication:
     -agent: "testing"
     -message: "🎉 IMAGE UPLOAD BACKEND TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE). Tested 7 scenarios covering full upload and serving lifecycle. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ Admin login working (username 'admin' password 'admin123' -> super_admin). ✅ POST /admin/upload with valid image dataUrl returns 200 {id, url} with correct URL format '/api/images/<id>'. ✅ GET /api/images/:id returns 200 with binary image (NOT JSON). ✅ Content-Type header is 'image/png' (CORRECT - verified). ✅ Invalid dataUrl 'notadataurl' returns 400. ✅ Non-image dataUrl 'data:text/plain;base64,...' returns 400 (MIME type validation working). ✅ Normal user gets 403 on POST /admin/upload (RBAC enforced). ✅ GET /api/images/nonexistent-id returns 404. NO ISSUES FOUND. Image upload stores in MongoDB correctly, image serving returns binary with correct Content-Type header, all validations working, RBAC enforced. Backend is production-ready."
 
+
+## ---- UPDATE 7: ALL ASSESSMENT RESULTS PAGE + ACCOUNT-HOLDER RELATIONSHIP (imported repo continuation) ----
+backend_all_results:
+  - task: "Admin all assessment results list (GET /admin/assessments) with filters, pagination, summary, relationship + account holder join"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Returns {items,total,page,pages,limit,summary{total,Normal,Ambang,Abnormal,redFlag},filters{kotaList,kecamatanList,kelurahanList},instruments[{code,name}]}. Query: page, limit(default 20,max 100), level(Normal|Ambang|Abnormal|all), instrument(code|all), redFlag(yes|no|all), q (matches memberName, account username, account holder name), kota/kecamatan/kelurahan (super_admin only). Each item: id, createdAt, instrumentCode, instrumentName, memberId, memberName, memberAge, memberGender, relationship (from members collection), overallCategory, level, score, scoreMax, redFlag, suicideRisk, kota/kecamatan/kelurahan, account{id,name,username,alamat,kota,kecamatan,kelurahan,status}, alert{id,status,severity,type}|null. NO answers, NO passwordHash. Summary is computed BEFORE level filter (but after other filters)."
+  - task: "Admin assessment detail (GET /admin/assessments/:id) with account holder, member, family, history, answerDetail"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Region scope enforced for scoped admins (404 if out of scope). Returns enriched item + result + answerDetail[{id,text,value,label}] + account (no passwordHash) + member{id,fullName,gender,dob,age,relationship} + family[] (all members of the account incl. isCurrent, assessmentCount, redFlagCount, latest) + memberHistory[]. 404 for unknown id."
+  - task: "Admin grouped by account (GET /admin/assessment-accounts)"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Same filters as list, limit default 10. Returns {items:[{account, memberCount, assessmentCount, redFlagCount, lastAssessmentAt, members:[{id,fullName,gender,age,relationship,assessmentCount,redFlagCount,latest}]}],total,page,pages,limit}. Accounts ordered by latest assessment desc."
+  - task: "RBAC/scope for new endpoints + cold-start race fix in connectToMongo"
+    implemented: true
+    working: "NA"
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: true
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "Normal user -> 403, no token -> 401. Scoped admins (admin_pa scopeKota, admin_kua scopeKecamatan, admin_mudin scopeKelurahan) are allowed on the 3 new endpoints but ONLY see their region (query region params ignored for them). connectToMongo is now promise-based so concurrent first requests after restart no longer 500 and no longer double-seed."
+
+frontend_all_results:
+  - task: "Admin tab 'Semua Hasil Asesmen' (list + per-account view + detail dialog) and admin_mudin now gets admin panel"
+    implemented: true
+    working: "NA"
+    file: "app/page.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "AdminResults + AssessmentDetailDialog components. Frontend ADMIN_ROLES now includes admin_mudin (previously mudin admins saw the user panel)."
+
+test_plan:
+  current_focus:
+    - "Admin all assessment results list (GET /admin/assessments) with filters, pagination, summary, relationship + account holder join"
+    - "Admin assessment detail (GET /admin/assessments/:id) with account holder, member, family, history, answerDetail"
+    - "Admin grouped by account (GET /admin/assessment-accounts)"
+    - "RBAC/scope for new endpoints + cold-start race fix in connectToMongo"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    -agent: "main"
+    -message: "Repo imported; .env recreated (DB_NAME=phd_database). New backend endpoints for all assessment results. Admin creds: admin/admin123 (super_admin). Create scoped admins via POST /api/admin/admins (super_admin) with body {name, username, password, role:'admin_pa'|'admin_kua'|'admin_mudin', scopeKota, scopeKecamatan, scopeKelurahan}. Register users via POST /api/auth/register {name,username,password,kota,kecamatan,kelurahan,alamat}; members via POST /api/members {fullName,gender:'Laki-laki'|'Perempuan',dob:'YYYY-MM-DD',relationship:'Diri Sendiri'|'Anak'|'Pasangan'|'Orang Tua'|'Saudara Kandung'|'Lainnya'}; member response has instruments[{code}]; GET /api/questionnaire/:code gives items; POST /api/assessments {memberId,instrumentCode,answers:{'<itemId>':value}}."
+    -agent: "testing"
+    -message: "🎉 NEW ASSESSMENT ENDPOINTS TESTING COMPLETE - ALL TESTS PASSED (100% SUCCESS RATE - 81/81 tests). Comprehensive testing completed with 8 major test sections covering all new endpoints, filters, pagination, RBAC, scoping, concurrency, and regression. ALL CRITICAL FUNCTIONALITY VERIFIED: ✅ TEST 1 - GET /api/admin/assessments BASIC LIST & SHAPE: Returns 200 with correct shape {items, total, page, pages, limit, summary{total, Normal, Ambang, Abnormal, redFlag}, filters{kotaList, kecamatanList, kelurahanList}, instruments}. Items contain relationship (matching member relationship), account{name, username, alamat, kota, kecamatan, kelurahan} (NO passwordHash), memberName, overallCategory, level, score, scoreMax, redFlag, alert. Items do NOT contain 'answers' field. List includes both normal and red-flag results (not only red flags). Items sorted by createdAt desc. ✅ TEST 2 - FILTERS: level=Normal returns only Normal items (6 items). level=Abnormal returns only Abnormal items (8 items). redFlag=yes returns only redFlag=true items (10 items). redFlag=no returns only redFlag=false items (5 items). instrument=phq9 returns only phq9 items (6 items). q=Budi finds member name (4 items). q=Siti finds account holder name (7 items). q=username finds username (3 items). kota=Kabupaten Jember filters correctly (9 items). kecamatan=Ajung filters correctly (4 items). kelurahan=Ajung filters correctly (4 items). Summary counts consistent (pre-filter summary.total=15) but total reflects level filter (total=6 for Normal). ✅ TEST 3 - PAGINATION: limit=2&page=1 vs page=2 return different items. Pages calculation correct (pages=8 for total=15, limit=2). Limit capped at 100. ✅ TEST 4 - GET /api/admin/assessments/:id DETAIL VIEW: Returns 200 with result, answerDetail (array with text/value/label, 9 items), account (NO passwordHash, has name/username/alamat/kota/kecamatan/kelurahan), member{fullName, relationship, age}, family (3 members, one isCurrent=true, with assessmentCount & latest), memberHistory (2 items). Unknown id returns 404. ✅ TEST 5 - GET /api/admin/assessment-accounts: Returns 200 {items, total, page, pages, limit}. Each item has account{name, username, alamat, kota, kecamatan, kelurahan, status}, memberCount, assessmentCount, redFlagCount, lastAssessmentAt, members[{fullName, relationship, assessmentCount, latest}]. Filters (level=Abnormal) work. Pagination (limit=1) works. ✅ TEST 6 - RBAC/SCOPE: Normal user token returns 403 on all 3 endpoints. No token returns 401. admin_pa (Jember) sees only Jember items (9 items), cannot see Banyuwangi even with kota filter (scope enforced). admin_kua (Ajung) sees only Ajung kecamatan items (4 items). admin_mudin (Ajung) sees only Ajung kelurahan items (4 items). Scoped admin GET /api/admin/assessments/:id of out-of-scope assessment returns 404. Scoped admins get 403 on /admin/users and /admin/instruments. ✅ TEST 7 - CONCURRENCY: Fired 10 parallel requests (GET /api/articles and POST /api/auth/login) right after nextjs restart. None returned 500. No duplicate instruments (4 unique). No duplicate articles (3 unique). ✅ TEST 8 - REGRESSION: GET /admin/alerts still works (200). GET /admin/stats still works (200). NO ISSUES FOUND. All endpoints working correctly with proper status codes, data structure, filters, pagination, RBAC enforcement, scope enforcement, and concurrency handling. Backend is production-ready."
+
+## ---- NEW ASSESSMENT MANAGEMENT ENDPOINTS ----
+backend_assessment_management:
+  - task: "Admin all assessment results list (GET /admin/assessments) with filters, pagination, summary"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /admin/assessments returns {items, total, page, pages, limit, summary{total, Normal, Ambang, Abnormal, redFlag}, filters{kotaList, kecamatanList, kelurahanList}, instruments}. Items enriched with relationship, account (no passwordHash), memberName, overallCategory, level, score, scoreMax, redFlag, alert. Supports filters: level, redFlag, instrument, q (search member/account/username), kota/kecamatan/kelurahan. Pagination with limit (capped at 100) and page. Summary is pre-level-filter but total reflects level filter. Items sorted by createdAt desc. Scoped admins see only their region. Items do NOT contain 'answers' field."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL TESTS PASSED (100% SUCCESS). TEST 1 - BASIC LIST & SHAPE: GET /api/admin/assessments returns 200 with correct shape. All required fields present: items, total, page, pages, limit, summary{total=15, Normal=6, Ambang=1, Abnormal=8, redFlag=10}, filters{kotaList count=2, kecamatanList count=3, kelurahanList count=3}, instruments (4 instruments). Items contain relationship='Diri Sendiri', account{name, username, alamat} (NO passwordHash), memberName, overallCategory, level, score, scoreMax, redFlag, alert (non-null). Items do NOT contain 'answers' field. List includes both normal (5 items) and red-flag (10 items) results. Items sorted by createdAt desc. TEST 2 - FILTERS: level=Normal returns only Normal items (6 items). level=Abnormal returns only Abnormal items (8 items). redFlag=yes returns only redFlag=true items (10 items). redFlag=no returns only redFlag=false items (5 items). instrument=phq9 returns only phq9 items (6 items). q=Budi finds member name (4 items). q=Siti finds account holder name (7 items). q=username finds username (3 items). kota=Kabupaten Jember filters correctly (9 items). kecamatan=Ajung filters correctly (4 items). kelurahan=Ajung filters correctly (4 items). Summary counts consistent: pre-filter summary.total=15, post-filter total=6 for Normal. TEST 3 - PAGINATION: limit=2&page=1 returns 2 items, total=15, pages=8. limit=2&page=2 returns 2 different items. Pages calculation correct (ceil(15/2)=8). Limit capped at 100 (requested 200, got 100). NO ISSUES FOUND."
+
+  - task: "Admin assessment detail (GET /admin/assessments/:id) with account, member, family, history, answerDetail"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /admin/assessments/:id returns full assessment with result, answerDetail (array with text/value/label), account (no passwordHash, has name/username/alamat/kota/kecamatan/kelurahan/status/createdAt), member{id, fullName, gender, dob, age, relationship}, family (all members of that account with isCurrent, assessmentCount, redFlagCount, latest), memberHistory (all assessments for this member). Scoped admins can only access assessments in their region (404 for out-of-scope). Unknown id returns 404."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL TESTS PASSED (100% SUCCESS). TEST 4 - DETAIL VIEW: GET /api/admin/assessments/:id returns 200 with all required fields. result field present. answerDetail array with text/value/label (9 items for PHQ-9). account does NOT contain passwordHash. account contains name, username, alamat, kota, kecamatan, kelurahan. member contains fullName='Budi Santoso', relationship='Diri Sendiri', age=34. family has 3 members, one with isCurrent=true, all with assessmentCount & latest. memberHistory has 2 items. Unknown assessment ID returns 404. NO ISSUES FOUND."
+
+  - task: "Admin grouped by account (GET /admin/assessment-accounts) with members and assessment counts"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "GET /admin/assessment-accounts returns {items, total, page, pages, limit}. Each item has account{id, name, username, alamat, kota, kecamatan, kelurahan, status}, memberCount, assessmentCount, redFlagCount, lastAssessmentAt, members[{id, fullName, gender, age, relationship, assessmentCount, redFlagCount, latest}]. Supports same filters as /admin/assessments (q, level, redFlag, region). Pagination with limit (default 10) and page. Scoped admins see only their region."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL TESTS PASSED (100% SUCCESS). TEST 5 - ACCOUNT-LEVEL VIEW: GET /api/admin/assessment-accounts returns 200 with correct shape. All required fields present: items, total, page, pages, limit. Each item has account{name, username, alamat, kota, kecamatan, kelurahan, status}, memberCount=1, assessmentCount=2, redFlagCount=2, lastAssessmentAt. members array with fullName='Siti Rahayu', relationship, assessmentCount=2, latest. Filter level=Abnormal works. Pagination limit=1 works (returns 1 item). NO ISSUES FOUND."
+
+  - task: "RBAC/scope for new assessment endpoints + concurrency handling"
+    implemented: true
+    working: true
+    file: "app/api/[[...path]]/route.js"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        -working: "NA"
+        -agent: "main"
+        -comment: "All 3 new endpoints (/admin/assessments, /admin/assessments/:id, /admin/assessment-accounts) added to scopedAllowed list for scoped admins (admin_pa, admin_kua, admin_mudin). Normal users get 403. No token gets 401. Scoped admins see only their region (enforced via scopeFilterFor). Scoped admins cannot bypass scope with query params. Scoped admins still get 403 on other admin routes (/admin/users, /admin/instruments, etc). Cold-start race condition fixed in connectToMongo with shared promise."
+        -working: true
+        -agent: "testing"
+        -comment: "✅ ALL TESTS PASSED (100% SUCCESS). TEST 6 - RBAC/SCOPE: Normal user token returns 403 on /admin/assessments and /admin/assessment-accounts. No token returns 401 on both endpoints. admin_pa (Jember) sees only Jember items (9 items), cannot see Banyuwangi even with kota=Kabupaten Banyuwangi filter (scope enforced). admin_kua (Ajung) sees only Ajung kecamatan items (4 items). admin_mudin (Ajung) sees only Ajung kelurahan items (4 items). Scoped admin GET /api/admin/assessments/:id of Banyuwangi assessment returns 404 (out-of-scope). Scoped admins get 403 on /admin/users and /admin/instruments. TEST 7 - CONCURRENCY: Restarted nextjs service, fired 10 parallel requests (GET /api/articles and POST /api/auth/login). None returned 500. No duplicate instruments (4 unique). No duplicate articles (3 unique). Cold-start race condition handled correctly. TEST 8 - REGRESSION: GET /admin/alerts still works (200). GET /admin/stats still works (200). NO ISSUES FOUND."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.3"
+  test_sequence: 5
+  run_ui: false

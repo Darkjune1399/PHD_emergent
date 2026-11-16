@@ -7,13 +7,25 @@ import crypto from 'crypto'
 let client
 let db
 let seeded = false
+let connectPromise = null
+let seedPromise = null
+// Promise-based so concurrent cold-start requests share one connection + one seed run
 async function connectToMongo() {
-  if (!client) {
-    client = new MongoClient(process.env.MONGO_URL)
-    await client.connect()
-    db = client.db(process.env.DB_NAME)
+  if (!db) {
+    if (!connectPromise) {
+      connectPromise = (async () => {
+        const c = new MongoClient(process.env.MONGO_URL)
+        await c.connect()
+        client = c
+        db = c.db(process.env.DB_NAME)
+      })().catch(e => { connectPromise = null; throw e })
+    }
+    await connectPromise
   }
-  if (!seeded) { await ensureSeed(db); seeded = true }
+  if (!seeded) {
+    if (!seedPromise) seedPromise = ensureSeed(db).then(() => { seeded = true }).catch(e => { seedPromise = null; throw e })
+    await seedPromise
+  }
   return db
 }
 
@@ -351,6 +363,76 @@ function levelOf(cat) {
   if (['ambang', 'ringan', 'sedang'].includes(c)) return 'Ambang'
   return 'Abnormal'
 }
+
+// ================= ADMIN: ALL ASSESSMENT RESULTS helpers =================
+function escRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&') }
+function safeUser(u) { if (!u) return null; const { _id, passwordHash, ...rest } = u; return rest }
+// Build Mongo filter for assessments from query params (region scope is ENFORCED for scoped admins)
+async function buildAssessmentFilter(db, user, url) {
+  const filter = { ...scopeFilterFor(user) }
+  if (isSuperAdmin(user)) {
+    const qKota = url.searchParams.get('kota'); const qKec = url.searchParams.get('kecamatan'); const qKel = url.searchParams.get('kelurahan')
+    if (qKota && qKota !== 'all') filter.kota = qKota
+    if (qKec && qKec !== 'all') filter.kecamatan = qKec
+    if (qKel && qKel !== 'all') filter.kelurahan = qKel
+  }
+  const inst = url.searchParams.get('instrument')
+  if (inst && inst !== 'all') filter.instrumentCode = inst
+  const rf = url.searchParams.get('redFlag')
+  if (rf === 'yes') filter['result.redFlag'] = true
+  if (rf === 'no') filter['result.redFlag'] = { $ne: true }
+  const q = (url.searchParams.get('q') || '').trim()
+  if (q) {
+    const re = new RegExp(escRe(q), 'i')
+    const holders = await db.collection('users').find({ $or: [{ name: re }, { username: re }] }).project({ id: 1 }).toArray()
+    filter.$or = [{ memberName: re }, { username: re }, { userId: { $in: holders.map(h => h.id) } }]
+  }
+  return filter
+}
+function briefAssessment(a) {
+  return { id: a.id, instrumentCode: a.instrumentCode, instrumentName: a.instrumentName, overallCategory: a.result?.overallCategory || null, level: levelOf(a.result?.overallCategory), score: a.result?.trendScore ?? null, scoreMax: a.result?.trendMax ?? null, redFlag: !!a.result?.redFlag, suicideRisk: !!a.result?.suicideRisk, createdAt: a.createdAt }
+}
+// Join assessments with account holder (users), assessed person (members) and alert status
+async function enrichAssessments(db, list) {
+  if (!list.length) return []
+  const userIds = [...new Set(list.map(a => a.userId))]
+  const memberIds = [...new Set(list.map(a => a.memberId))]
+  const [users, members, alerts] = await Promise.all([
+    db.collection('users').find({ id: { $in: userIds } }).project({ _id: 0, passwordHash: 0 }).toArray(),
+    db.collection('members').find({ id: { $in: memberIds } }).project({ _id: 0 }).toArray(),
+    db.collection('alerts').find({ assessmentId: { $in: list.map(a => a.id) } }).project({ _id: 0, id: 1, assessmentId: 1, status: 1, severity: 1, type: 1 }).toArray(),
+  ])
+  const uMap = Object.fromEntries(users.map(u => [u.id, u]))
+  const mMap = Object.fromEntries(members.map(m => [m.id, m]))
+  const aMap = Object.fromEntries(alerts.map(al => [al.assessmentId, al]))
+  return list.map(a => {
+    const u = uMap[a.userId]; const m = mMap[a.memberId]; const al = aMap[a.id]
+    return {
+      ...briefAssessment(a),
+      family: a.family, scoreLabel: a.result?.trendLabel || null,
+      memberId: a.memberId, memberName: m?.fullName || a.memberName, memberAge: a.memberAge, memberGender: m?.gender || a.memberGender || null,
+      relationship: m?.relationship || null,
+      kota: a.kota || null, kecamatan: a.kecamatan || null, kelurahan: a.kelurahan || null,
+      account: u ? { id: u.id, name: u.name, username: u.username, alamat: u.alamat || null, kota: u.kota || null, kecamatan: u.kecamatan || null, kelurahan: u.kelurahan || null, status: u.status || 'active' } : { id: a.userId, name: null, username: a.username || null },
+      alert: al ? { id: al.id, status: al.status, severity: al.severity, type: al.type } : null,
+    }
+  })
+}
+async function assessmentFilterLists(db, user, url) {
+  if (!isSuperAdmin(user)) return { kotaList: [], kecamatanList: [], kelurahanList: [] }
+  const qKota = url.searchParams.get('kota'); const qKec = url.searchParams.get('kecamatan')
+  const kotaList = (await db.collection('assessments').distinct('kota', { kota: { $nin: [null, ''] } })).sort()
+  const kecF = { kecamatan: { $nin: [null, ''] } }; if (qKota && qKota !== 'all') kecF.kota = qKota
+  const kecamatanList = (await db.collection('assessments').distinct('kecamatan', kecF)).sort()
+  const kelF = { kelurahan: { $nin: [null, ''] } }; if (qKota && qKota !== 'all') kelF.kota = qKota; if (qKec && qKec !== 'all') kelF.kecamatan = qKec
+  const kelurahanList = (await db.collection('assessments').distinct('kelurahan', kelF)).sort()
+  return { kotaList, kecamatanList, kelurahanList }
+}
+function pageParams(url, defLimit) {
+  const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10) || 1)
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get('limit') || String(defLimit), 10) || defLimit))
+  return { page, limit }
+}
 function buildTrend(assessments, range) {
   const now = new Date()
   if (range === 'monthly') {
@@ -560,7 +642,7 @@ async function handleRoute(request, { params }) {
       if (!isAdmin(user)) return handleCORS(NextResponse.json({ error: 'Akses ditolak (bukan admin)' }, { status: 403 }))
 
       // Scoped admins (KUA/PA) may ONLY access dashboard stats & red flag alerts
-      const scopedAllowed = route === '/admin/stats' || route === '/admin/alerts' || route.startsWith('/admin/alerts/')
+      const scopedAllowed = route === '/admin/stats' || route === '/admin/alerts' || route.startsWith('/admin/alerts/') || route === '/admin/assessments' || route.startsWith('/admin/assessments/') || route === '/admin/assessment-accounts'
       if (!isSuperAdmin(user) && !scopedAllowed) return handleCORS(NextResponse.json({ error: 'Akses ditolak (di luar wilayah tugas Anda)' }, { status: 403 }))
 
       if (route === '/admin/stats' && method === 'GET') {
@@ -643,6 +725,84 @@ async function handleRoute(request, { params }) {
         const assessment = await db.collection('assessments').findOne({ id: a.assessmentId })
         const { _id, ...ca } = a
         return handleCORS(NextResponse.json({ ...ca, assessment: assessment ? (({ _id, ...r }) => r)(assessment) : null }))
+      }
+
+      // ---------- ALL ASSESSMENT RESULTS (super_admin: all regions, scoped admins: own region) ----------
+      if (route === '/admin/assessments' && method === 'GET') {
+        const url = new URL(request.url)
+        const filter = await buildAssessmentFilter(db, user, url)
+        const level = url.searchParams.get('level')
+        const { page, limit } = pageParams(url, 20)
+        const all = await db.collection('assessments').find(filter).project({ _id: 0, answers: 0 }).sort({ createdAt: -1 }).toArray()
+        const summary = { total: all.length, Normal: 0, Ambang: 0, Abnormal: 0, redFlag: 0 }
+        all.forEach(a => { summary[levelOf(a.result?.overallCategory)]++; if (a.result?.redFlag) summary.redFlag++ })
+        const filtered = level && level !== 'all' ? all.filter(a => levelOf(a.result?.overallCategory) === level) : all
+        const total = filtered.length
+        const pages = Math.max(1, Math.ceil(total / limit))
+        const items = await enrichAssessments(db, filtered.slice((page - 1) * limit, page * limit))
+        const instruments = (await db.collection('instruments').find({}).project({ _id: 0, code: 1, name: 1 }).toArray())
+        const filters = await assessmentFilterLists(db, user, url)
+        return handleCORS(NextResponse.json({ items, total, page, pages, limit, summary, filters, instruments }))
+      }
+      if (route.startsWith('/admin/assessments/') && method === 'GET') {
+        const a = await db.collection('assessments').findOne({ id: path[2], ...scopeFilterFor(user) })
+        if (!a) return handleCORS(NextResponse.json({ error: 'Hasil asesmen tidak ditemukan' }, { status: 404 }))
+        const [enriched] = await enrichAssessments(db, [a])
+        const holder = safeUser(await db.collection('users').findOne({ id: a.userId }))
+        const familyMembers = await db.collection('members').find({ userId: a.userId }).project({ _id: 0 }).sort({ createdAt: 1 }).toArray()
+        const famAssess = await db.collection('assessments').find({ userId: a.userId }).project({ _id: 0, answers: 0 }).sort({ createdAt: -1 }).toArray()
+        const family = familyMembers.map(m => {
+          const list = famAssess.filter(x => x.memberId === m.id)
+          return { id: m.id, fullName: m.fullName, gender: m.gender, dob: m.dob, age: calcAge(m.dob), relationship: m.relationship, isCurrent: m.id === a.memberId, assessmentCount: list.length, redFlagCount: list.filter(x => x.result?.redFlag).length, latest: list[0] ? briefAssessment(list[0]) : null }
+        })
+        const memberHistory = famAssess.filter(x => x.memberId === a.memberId).map(briefAssessment)
+        const inst = await getInstrument(db, a.instrumentCode)
+        const answers = a.answers || {}
+        const answerDetail = inst ? inst.items.map(it => {
+          const v = answers[it.id] ?? answers[String(it.id)]
+          const opt = (inst.options || []).find(o => Number(o.value) === Number(v))
+          return { id: it.id, text: it.text, value: v ?? null, label: opt?.label || null }
+        }) : []
+        const member = familyMembers.find(m => m.id === a.memberId) || null
+        return handleCORS(NextResponse.json({
+          ...enriched, result: a.result, answerDetail,
+          account: holder ? { id: holder.id, name: holder.name, username: holder.username, alamat: holder.alamat || null, kota: holder.kota || null, kecamatan: holder.kecamatan || null, kelurahan: holder.kelurahan || null, status: holder.status || 'active', createdAt: holder.createdAt } : enriched.account,
+          member: member ? { id: member.id, fullName: member.fullName, gender: member.gender, dob: member.dob, age: calcAge(member.dob), relationship: member.relationship } : null,
+          family, memberHistory,
+        }))
+      }
+      if (route === '/admin/assessment-accounts' && method === 'GET') {
+        const url = new URL(request.url)
+        const filter = await buildAssessmentFilter(db, user, url)
+        const level = url.searchParams.get('level')
+        const { page, limit } = pageParams(url, 10)
+        let all = await db.collection('assessments').find(filter).project({ _id: 0, answers: 0 }).sort({ createdAt: -1 }).toArray()
+        if (level && level !== 'all') all = all.filter(a => levelOf(a.result?.overallCategory) === level)
+        const orderedIds = []; const seen = new Set()
+        for (const a of all) if (!seen.has(a.userId)) { seen.add(a.userId); orderedIds.push(a.userId) }
+        const total = orderedIds.length
+        const pages = Math.max(1, Math.ceil(total / limit))
+        const pageIds = orderedIds.slice((page - 1) * limit, page * limit)
+        const [users, members, accAssess] = await Promise.all([
+          db.collection('users').find({ id: { $in: pageIds } }).project({ _id: 0, passwordHash: 0 }).toArray(),
+          db.collection('members').find({ userId: { $in: pageIds } }).project({ _id: 0 }).sort({ createdAt: 1 }).toArray(),
+          db.collection('assessments').find({ userId: { $in: pageIds }, ...scopeFilterFor(user) }).project({ _id: 0, answers: 0 }).sort({ createdAt: -1 }).toArray(),
+        ])
+        const uMap = Object.fromEntries(users.map(u => [u.id, u]))
+        const items = pageIds.map(uid => {
+          const u = uMap[uid]; const accList = accAssess.filter(x => x.userId === uid)
+          const mem = members.filter(m => m.userId === uid).map(m => {
+            const list = accList.filter(x => x.memberId === m.id)
+            return { id: m.id, fullName: m.fullName, gender: m.gender, age: calcAge(m.dob), relationship: m.relationship, assessmentCount: list.length, redFlagCount: list.filter(x => x.result?.redFlag).length, latest: list[0] ? briefAssessment(list[0]) : null }
+          })
+          const fallback = accList[0] || all.find(x => x.userId === uid)
+          return {
+            account: u ? { id: u.id, name: u.name, username: u.username, alamat: u.alamat || null, kota: u.kota || null, kecamatan: u.kecamatan || null, kelurahan: u.kelurahan || null, status: u.status || 'active' } : { id: uid, name: null, username: fallback?.username || null, kota: fallback?.kota || null, kecamatan: fallback?.kecamatan || null, kelurahan: fallback?.kelurahan || null },
+            memberCount: mem.length, assessmentCount: accList.length, redFlagCount: accList.filter(x => x.result?.redFlag).length, lastAssessmentAt: accList[0]?.createdAt || null,
+            members: mem,
+          }
+        })
+        return handleCORS(NextResponse.json({ items, total, page, pages, limit }))
       }
 
       if (route === '/admin/instruments' && method === 'GET') {

@@ -8,7 +8,7 @@ import json
 import time
 from datetime import datetime
 
-BASE_URL = "https://mental-assess-app.preview.emergentagent.com/api"
+BASE_URL = "https://emergent-repo-4--74uv85el.preview.emergentagent.com/api"
 
 def log(msg):
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")

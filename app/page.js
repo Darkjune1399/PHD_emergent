@@ -17,11 +17,11 @@ import { toast } from 'sonner'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Cell } from 'recharts'
 import { Textarea } from '@/components/ui/textarea'
-import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video, MapPin, BarChart3 } from 'lucide-react'
+import { Brain, Users, Plus, LogOut, Heart, Activity, FileText, ClipboardList, AlertTriangle, Trash2, Pencil, ArrowLeft, Phone, TrendingUp, ShieldAlert, HeartPulse, Baby, User, LayoutDashboard, Bell, Settings, ListChecks, ScrollText, Save, ShieldCheck, RefreshCw, UserCog, KeyRound, Ban, CheckCircle2, BookUser, MessageSquare, Star, Bold, Italic, Underline, Heading2, Heading3, List, ListOrdered, Link2, Image as ImageIcon, Video, MapPin, BarChart3, Search, ChevronLeft, ChevronRight, ArrowRight, Eye } from 'lucide-react'
 import { REGIONS, KOTA_LIST, kecamatanOf, kelurahanOf } from '@/lib/regions'
 
 const REL_OPTS = ['Diri Sendiri', 'Anak', 'Pasangan', 'Orang Tua', 'Saudara Kandung', 'Lainnya']
-const ADMIN_ROLES = ['super_admin', 'admin_kua', 'admin_pa']
+const ADMIN_ROLES = ['super_admin', 'admin_kua', 'admin_pa', 'admin_mudin']
 function isAdminRole(role) { return ADMIN_ROLES.includes(role) }
 
 function api(path, { method = 'GET', body, token } = {}) {
@@ -741,6 +741,7 @@ function AdminPanel({ user, token, logout }) {
         <Tabs value={tab} onValueChange={setTab}>
           <TabsList className="mb-6 flex-wrap h-auto">
             <TabsTrigger value="dashboard"><LayoutDashboard className="h-4 w-4 mr-1" /> Dashboard</TabsTrigger>
+            <TabsTrigger value="results" data-testid="tab-all-results"><ClipboardList className="h-4 w-4 mr-1" /> Semua Hasil Asesmen</TabsTrigger>
             <TabsTrigger value="alerts"><Bell className="h-4 w-4 mr-1" /> Red Flag Alerts</TabsTrigger>
             {isSuper && <TabsTrigger value="admins"><ShieldCheck className="h-4 w-4 mr-1" /> Manajemen Admin</TabsTrigger>}
             {isSuper && <TabsTrigger value="kuesioner"><ListChecks className="h-4 w-4 mr-1" /> Master Kuesioner</TabsTrigger>}
@@ -752,6 +753,7 @@ function AdminPanel({ user, token, logout }) {
             {isSuper && <TabsTrigger value="log"><ScrollText className="h-4 w-4 mr-1" /> Audit Log</TabsTrigger>}
           </TabsList>
           <TabsContent value="dashboard"><AdminDashboard aapi={aapi} isSuper={isSuper} /></TabsContent>
+          <TabsContent value="results"><AdminResults aapi={aapi} isSuper={isSuper} /></TabsContent>
           <TabsContent value="alerts"><AdminAlerts aapi={aapi} isSuper={isSuper} /></TabsContent>
           {isSuper && <TabsContent value="admins"><AdminAdmins aapi={aapi} /></TabsContent>}
           {isSuper && <TabsContent value="kuesioner"><AdminInstruments aapi={aapi} /></TabsContent>}
@@ -870,6 +872,360 @@ function AdminDashboard({ aapi, isSuper }) {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+// ================= ADMIN: ALL ASSESSMENT RESULTS =================
+const LEVEL_CHIP = { Normal: 'border-emerald-200 bg-emerald-50 text-emerald-700', Ambang: 'border-amber-200 bg-amber-50 text-amber-700', Abnormal: 'border-red-200 bg-red-50 text-red-700' }
+function relText(rel) {
+  if (!rel) return 'Hubungan tidak tercatat'
+  if (rel === 'Diri Sendiri') return 'Pemegang akun sendiri'
+  return `${rel} dari pemegang akun`
+}
+function RelBadge({ rel }) {
+  const self = rel === 'Diri Sendiri'
+  return <span data-testid="relationship-badge" className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap ${self ? 'border-teal-200 bg-teal-50 text-teal-700' : 'border-violet-200 bg-violet-50 text-violet-700'}`}>{self ? <User className="h-3 w-3" /> : <Users className="h-3 w-3" />}{rel || '-'}</span>
+}
+function fmtDate(d) { return d ? new Date(d).toLocaleString('id-ID', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-' }
+function Pager({ page, pages, total, unit, onPage }) {
+  return (
+    <div className="flex items-center justify-between gap-3 px-4 py-3 border-t text-sm text-slate-500 flex-wrap">
+      <span data-testid="pager-info">Halaman {page} dari {pages} • {total} {unit}</span>
+      <div className="flex gap-2">
+        <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => onPage(page - 1)} data-testid="pager-prev"><ChevronLeft className="h-4 w-4" /> Sebelumnya</Button>
+        <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => onPage(page + 1)} data-testid="pager-next">Berikutnya <ChevronRight className="h-4 w-4" /></Button>
+      </div>
+    </div>
+  )
+}
+
+function AdminResults({ aapi, isSuper }) {
+  const [mode, setMode] = useState('list')
+  const [qInput, setQInput] = useState('')
+  const [q, setQ] = useState('')
+  const [level, setLevel] = useState('all')
+  const [instrument, setInstrument] = useState('all')
+  const [redFlag, setRedFlag] = useState('all')
+  const [kota, setKota] = useState('all')
+  const [kec, setKec] = useState('all')
+  const [kel, setKel] = useState('all')
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState(null)
+  const [meta, setMeta] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [detail, setDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const reqId = useRef(0)
+
+  useEffect(() => { const t = setTimeout(() => { setQ(qInput.trim()); setPage(1) }, 400); return () => clearTimeout(t) }, [qInput])
+
+  const baseQs = `level=${level}&instrument=${encodeURIComponent(instrument)}&redFlag=${redFlag}&q=${encodeURIComponent(q)}&kota=${encodeURIComponent(kota)}&kecamatan=${encodeURIComponent(kec)}&kelurahan=${encodeURIComponent(kel)}`
+  async function load() {
+    const my = ++reqId.current
+    setLoading(true)
+    try {
+      if (mode === 'list') {
+        const d = await aapi(`/admin/assessments?${baseQs}&page=${page}&limit=20`)
+        if (my !== reqId.current) return
+        setData(d); setMeta({ summary: d.summary, filters: d.filters, instruments: d.instruments })
+      } else {
+        const [acc, m] = await Promise.all([aapi(`/admin/assessment-accounts?${baseQs}&page=${page}&limit=10`), aapi(`/admin/assessments?${baseQs}&page=1&limit=1`)])
+        if (my !== reqId.current) return
+        setData(acc); setMeta({ summary: m.summary, filters: m.filters, instruments: m.instruments })
+      }
+    } catch (e) { toast.error(e.message) } finally { if (my === reqId.current) setLoading(false) }
+  }
+  useEffect(() => { load() }, [mode, baseQs, page])
+
+  async function openDetail(id) {
+    setDetailLoading(true)
+    try { const d = await aapi(`/admin/assessments/${id}`); setDetail(d) } catch (e) { toast.error(e.message) } finally { setDetailLoading(false) }
+  }
+  function changeFilter(setter) { return v => { setter(v); setPage(1) } }
+  function resetFilters() { setQInput(''); setQ(''); setLevel('all'); setInstrument('all'); setRedFlag('all'); setKota('all'); setKec('all'); setKel('all'); setPage(1) }
+  const hasFilter = q || level !== 'all' || instrument !== 'all' || redFlag !== 'all' || kota !== 'all' || kec !== 'all' || kel !== 'all'
+  const s = meta?.summary || { total: 0, Normal: 0, Ambang: 0, Abnormal: 0, redFlag: 0 }
+  const items = data?.items || []
+
+  const chips = [
+    { key: 'all', label: 'Semua Hasil', value: s.total, cls: 'border-slate-200 bg-white text-slate-700', active: level === 'all' && redFlag === 'all', onClick: () => { setLevel('all'); setRedFlag('all'); setPage(1) } },
+    { key: 'Normal', label: 'Normal', value: s.Normal, cls: LEVEL_CHIP.Normal, active: level === 'Normal', onClick: () => { setLevel('Normal'); setPage(1) } },
+    { key: 'Ambang', label: 'Ambang / Ringan-Sedang', value: s.Ambang, cls: LEVEL_CHIP.Ambang, active: level === 'Ambang', onClick: () => { setLevel('Ambang'); setPage(1) } },
+    { key: 'Abnormal', label: 'Abnormal / Berat', value: s.Abnormal, cls: LEVEL_CHIP.Abnormal, active: level === 'Abnormal', onClick: () => { setLevel('Abnormal'); setPage(1) } },
+    { key: 'rf', label: 'Red Flag', value: s.redFlag, cls: 'border-red-300 bg-red-600 text-white', active: redFlag === 'yes', onClick: () => { setRedFlag(redFlag === 'yes' ? 'all' : 'yes'); setPage(1) } },
+  ]
+
+  return (
+    <div className="space-y-4" data-testid="admin-all-results">
+      <div className="flex items-start justify-between flex-wrap gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2"><ClipboardList className="h-5 w-5 text-teal-600" /> Seluruh Hasil Asesmen</h3>
+          <p className="text-sm text-slate-500">Semua hasil asesmen (normal, ambang, abnormal & red flag) beserta hubungan orang yang diasesmen dengan pemegang akun.</p>
+        </div>
+        <div className="inline-flex rounded-lg border bg-white p-1 shadow-sm">
+          <button data-testid="mode-list" onClick={() => { setMode('list'); setPage(1); setData(null) }} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${mode === 'list' ? 'bg-teal-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}><List className="h-4 w-4" /> Per Asesmen</button>
+          <button data-testid="mode-accounts" onClick={() => { setMode('accounts'); setPage(1); setData(null) }} className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition ${mode === 'accounts' ? 'bg-teal-600 text-white shadow' : 'text-slate-600 hover:bg-slate-100'}`}><Users className="h-4 w-4" /> Per Akun Keluarga</button>
+        </div>
+      </div>
+
+      <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+        {chips.map(c => (
+          <button key={c.key} data-testid={`summary-chip-${c.key}`} onClick={c.onClick} className={`rounded-xl border px-4 py-3 text-left transition hover:shadow-md ${c.cls} ${c.active ? 'ring-2 ring-teal-500 ring-offset-1' : ''}`}>
+            <div className="text-2xl font-bold">{c.value}</div>
+            <div className="text-xs font-medium opacity-90">{c.label}</div>
+          </button>
+        ))}
+      </div>
+
+      <Card>
+        <CardContent className="py-4 flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input data-testid="results-search" value={qInput} onChange={e => setQInput(e.target.value)} placeholder="Cari nama yang diasesmen, nama / username pemegang akun..." className="pl-9 h-9" />
+          </div>
+          <Select value={instrument} onValueChange={changeFilter(setInstrument)}>
+            <SelectTrigger className="w-52 h-9" data-testid="filter-instrument"><SelectValue placeholder="Semua Instrumen" /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Semua Instrumen</SelectItem>{(meta?.instruments || []).map(i => <SelectItem key={i.code} value={i.code}>{i.name}</SelectItem>)}</SelectContent>
+          </Select>
+          <Select value={level} onValueChange={changeFilter(setLevel)}>
+            <SelectTrigger className="w-40 h-9" data-testid="filter-level"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Semua Kategori</SelectItem><SelectItem value="Normal">Normal</SelectItem><SelectItem value="Ambang">Ambang</SelectItem><SelectItem value="Abnormal">Abnormal</SelectItem></SelectContent>
+          </Select>
+          <Select value={redFlag} onValueChange={changeFilter(setRedFlag)}>
+            <SelectTrigger className="w-40 h-9" data-testid="filter-redflag"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">Red Flag: Semua</SelectItem><SelectItem value="yes">Hanya Red Flag</SelectItem><SelectItem value="no">Tanpa Red Flag</SelectItem></SelectContent>
+          </Select>
+          {isSuper && (<>
+            <Select value={kota} onValueChange={v => { setKota(v); setKec('all'); setKel('all'); setPage(1) }}>
+              <SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kota" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kota / Kab.</SelectItem>{(meta?.filters?.kotaList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={kec} onValueChange={v => { setKec(v); setKel('all'); setPage(1) }} disabled={kota === 'all'}>
+              <SelectTrigger className="w-40 h-9"><SelectValue placeholder="Semua Kecamatan" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kecamatan</SelectItem>{(meta?.filters?.kecamatanList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+            <Select value={kel} onValueChange={changeFilter(setKel)} disabled={kec === 'all'}>
+              <SelectTrigger className="w-44 h-9"><SelectValue placeholder="Semua Kelurahan/Desa" /></SelectTrigger>
+              <SelectContent><SelectItem value="all">Semua Kelurahan/Desa</SelectItem>{(meta?.filters?.kelurahanList || []).map(k => <SelectItem key={k} value={k}>{k}</SelectItem>)}</SelectContent>
+            </Select>
+          </>)}
+          {hasFilter && <Button variant="ghost" size="sm" onClick={resetFilters} data-testid="filter-reset">Reset</Button>}
+          <Button variant="outline" size="sm" onClick={load} title="Muat ulang"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+        </CardContent>
+      </Card>
+
+      {mode === 'list' ? (
+        <Card><CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <Table data-testid="results-table">
+              <TableHeader><TableRow>
+                <TableHead>Waktu</TableHead><TableHead>Orang yang Diasesmen</TableHead><TableHead>Hubungan</TableHead><TableHead>Pemegang Akun</TableHead><TableHead>Wilayah</TableHead><TableHead>Instrumen</TableHead><TableHead className="text-center">Skor</TableHead><TableHead className="text-center">Kategori</TableHead><TableHead className="text-center">Red Flag</TableHead><TableHead></TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {!data ? (<TableRow><TableCell colSpan={10} className="text-center text-slate-400 py-10">Memuat data...</TableCell></TableRow>)
+                  : items.length === 0 ? (<TableRow><TableCell colSpan={10} className="text-center text-slate-400 py-10">Belum ada hasil asesmen{hasFilter ? ' yang cocok dengan filter' : ''}.</TableCell></TableRow>)
+                  : items.map(a => (
+                    <TableRow key={a.id} data-testid="result-row" className={a.redFlag ? 'bg-red-50/30' : ''}>
+                      <TableCell className="text-xs whitespace-nowrap text-slate-500">{fmtDate(a.createdAt)}</TableCell>
+                      <TableCell><div className="text-sm font-medium text-slate-800">{a.memberName}</div><div className="text-xs text-slate-400">{a.memberAge} th • {a.memberGender || '-'}</div></TableCell>
+                      <TableCell><RelBadge rel={a.relationship} /></TableCell>
+                      <TableCell><div className="text-sm font-medium text-slate-700">{a.account?.name || '-'}</div><div className="text-xs text-slate-400">@{a.account?.username || '-'}</div></TableCell>
+                      <TableCell className="text-sm">{a.kota || '-'}<div className="text-xs text-slate-400">{a.kecamatan || '-'}{a.kelurahan ? ` • ${a.kelurahan}` : ''}</div></TableCell>
+                      <TableCell className="text-sm">{a.instrumentName}</TableCell>
+                      <TableCell className="text-center text-sm font-semibold text-slate-700 whitespace-nowrap">{a.score ?? '-'}{a.scoreMax ? <span className="text-xs font-normal text-slate-400"> / {a.scoreMax}</span> : null}</TableCell>
+                      <TableCell className="text-center"><CatBadge cat={a.overallCategory} /></TableCell>
+                      <TableCell className="text-center">{a.redFlag ? (<div className="flex flex-col items-center gap-0.5"><span className="inline-flex items-center gap-1 rounded-full bg-red-600 text-white px-2 py-0.5 text-[10px] font-semibold"><AlertTriangle className="h-3 w-3" /> Ya</span>{a.alert?.status && <span className="text-[10px] text-slate-500">{a.alert.status}</span>}</div>) : <span className="text-xs text-slate-400">Tidak</span>}</TableCell>
+                      <TableCell><Button size="sm" variant="outline" onClick={() => openDetail(a.id)} data-testid="result-detail-btn"><Eye className="h-4 w-4 mr-1" /> Detail</Button></TableCell>
+                    </TableRow>
+                  ))}
+              </TableBody>
+            </Table>
+          </div>
+          {data && data.total > 0 && <Pager page={data.page} pages={data.pages} total={data.total} unit="hasil" onPage={setPage} />}
+        </CardContent></Card>
+      ) : (
+        <div className="space-y-4" data-testid="accounts-view">
+          {!data ? <div className="text-slate-500 text-sm">Memuat data...</div>
+            : items.length === 0 ? <Card><CardContent className="py-10 text-center text-slate-400">Belum ada akun dengan hasil asesmen{hasFilter ? ' yang cocok dengan filter' : ''}.</CardContent></Card>
+            : items.map(acc => (
+              <Card key={acc.account?.id} data-testid="account-card" className="overflow-hidden">
+                <div className="bg-gradient-to-r from-slate-50 to-teal-50/60 border-b px-5 py-4 flex items-start justify-between gap-4 flex-wrap">
+                  <div className="flex items-start gap-3">
+                    <div className="rounded-full bg-teal-600 text-white h-11 w-11 flex items-center justify-center font-bold text-lg shrink-0">{(acc.account?.name || acc.account?.username || '?').charAt(0).toUpperCase()}</div>
+                    <div>
+                      <div className="text-xs uppercase tracking-wide text-teal-700 font-semibold">Pemegang Akun</div>
+                      <div className="font-semibold text-slate-800">{acc.account?.name || '-'} <span className="text-sm font-normal text-slate-400">@{acc.account?.username || '-'}</span>{acc.account?.status === 'suspended' && <Badge variant="destructive" className="ml-2 text-[10px]">Ditangguhkan</Badge>}</div>
+                      <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5"><MapPin className="h-3 w-3" />{[acc.account?.alamat, acc.account?.kelurahan, acc.account?.kecamatan, acc.account?.kota].filter(Boolean).join(', ') || '-'}</div>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 text-center">
+                    <div><div className="text-lg font-bold text-slate-800">{acc.memberCount}</div><div className="text-[11px] text-slate-500">Anggota</div></div>
+                    <div><div className="text-lg font-bold text-slate-800">{acc.assessmentCount}</div><div className="text-[11px] text-slate-500">Asesmen</div></div>
+                    <div><div className={`text-lg font-bold ${acc.redFlagCount ? 'text-red-600' : 'text-slate-800'}`}>{acc.redFlagCount}</div><div className="text-[11px] text-slate-500">Red Flag</div></div>
+                    <div className="hidden sm:block text-left"><div className="text-xs font-medium text-slate-700">{fmtDate(acc.lastAssessmentAt)}</div><div className="text-[11px] text-slate-500">Asesmen terakhir</div></div>
+                  </div>
+                </div>
+                <CardContent className="p-0">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader><TableRow><TableHead>Anggota Keluarga</TableHead><TableHead>Hubungan dengan Pemegang Akun</TableHead><TableHead className="text-center">Jumlah Asesmen</TableHead><TableHead>Hasil Terakhir</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {(acc.members || []).length === 0 ? (<TableRow><TableCell colSpan={5} className="text-center text-slate-400 py-6 text-sm">Data anggota sudah dihapus oleh pemegang akun.</TableCell></TableRow>) : acc.members.map(m => (
+                          <TableRow key={m.id} data-testid="account-member-row">
+                            <TableCell><div className="flex items-center gap-2"><div className="rounded-full bg-slate-100 p-1.5 text-slate-500">{ageIcon(m.age)}</div><div><div className="text-sm font-medium text-slate-800">{m.fullName}</div><div className="text-xs text-slate-400">{m.age} th • {m.gender}</div></div></div></TableCell>
+                            <TableCell><div className="flex flex-col gap-1 items-start"><RelBadge rel={m.relationship} /><span className="text-[11px] text-slate-400">{relText(m.relationship)}</span></div></TableCell>
+                            <TableCell className="text-center text-sm">{m.assessmentCount}{m.redFlagCount > 0 && <span className="ml-1 text-xs text-red-600 font-medium">({m.redFlagCount} red flag)</span>}</TableCell>
+                            <TableCell>{m.latest ? (<div className="flex items-center gap-2 flex-wrap"><CatBadge cat={m.latest.overallCategory} /><span className="text-xs text-slate-500">{m.latest.instrumentName} • {fmtDate(m.latest.createdAt)}</span></div>) : <span className="text-xs text-slate-400">Belum pernah asesmen</span>}</TableCell>
+                            <TableCell className="text-right">{m.latest && <Button size="sm" variant="outline" onClick={() => openDetail(m.latest.id)}><Eye className="h-4 w-4 mr-1" /> Detail</Button>}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          {data && data.total > 0 && <Card><Pager page={data.page} pages={data.pages} total={data.total} unit="akun" onPage={setPage} /></Card>}
+        </div>
+      )}
+
+      <AssessmentDetailDialog detail={detail} loading={detailLoading} onClose={() => setDetail(null)} onOpen={openDetail} />
+    </div>
+  )
+}
+
+function AssessmentDetailDialog({ detail, loading, onClose, onOpen }) {
+  const [showAnswers, setShowAnswers] = useState(false)
+  useEffect(() => { setShowAnswers(false) }, [detail?.id])
+  const r = detail?.result
+  const lvl = catLevel(detail?.overallCategory)
+  const banner = lvl === 'ok' ? 'from-emerald-500 to-teal-600' : lvl === 'warn' ? 'from-amber-500 to-orange-500' : 'from-red-500 to-rose-600'
+  const self = detail?.relationship === 'Diri Sendiri'
+  return (
+    <Dialog open={!!detail} onOpenChange={o => !o && onClose()}>
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto" data-testid="result-detail-dialog">
+        <DialogHeader><DialogTitle>Detail Hasil Asesmen</DialogTitle><DialogDescription>Hasil skrining, hubungan dengan pemegang akun, dan data keluarga dalam akun.</DialogDescription></DialogHeader>
+        {detail && (
+          <div className={`space-y-5 ${loading ? 'opacity-60' : ''}`}>
+            <div className={`rounded-xl bg-gradient-to-r ${banner} text-white p-5 shadow`}>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <div><div className="text-sm opacity-90">{detail.instrumentName}</div><div className="text-xl font-bold">{detail.memberName} • {detail.memberAge} th</div><div className="text-xs opacity-90 mt-1">{fmtDate(detail.createdAt)}</div></div>
+                <div className="text-right"><div className="text-xs opacity-90">Kategori Hasil</div><div className="text-xl font-bold">{detail.overallCategory}</div>{detail.score != null && <div className="text-xs opacity-90">{detail.scoreLabel}: {detail.score} / {detail.scoreMax}</div>}</div>
+              </div>
+            </div>
+
+            {/* Relationship between assessed person and account holder */}
+            <div data-testid="relationship-section">
+              <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Users className="h-4 w-4 text-teal-600" /> Hubungan dengan Pemegang Akun</div>
+              {self ? (
+                <div className="rounded-xl border border-teal-200 bg-teal-50 p-4 text-sm">
+                  <div className="font-semibold text-teal-800">{detail.account?.name} <span className="font-normal text-teal-600">@{detail.account?.username}</span></div>
+                  <div className="text-teal-700">Asesmen ini dilakukan untuk <b>pemegang akun sendiri</b> (Diri Sendiri).</div>
+                  <div className="text-xs text-teal-600 mt-1 flex items-center gap-1"><MapPin className="h-3 w-3" />{[detail.account?.alamat, detail.account?.kelurahan, detail.account?.kecamatan, detail.account?.kota].filter(Boolean).join(', ') || '-'}</div>
+                </div>
+              ) : (
+                <div className="grid sm:grid-cols-[1fr_auto_1fr] items-stretch gap-3">
+                  <div className="rounded-xl border bg-slate-50 p-4">
+                    <div className="text-[11px] uppercase tracking-wide text-slate-500 font-semibold">Pemegang Akun</div>
+                    <div className="font-semibold text-slate-800 mt-1">{detail.account?.name || '-'}</div>
+                    <div className="text-xs text-slate-500">@{detail.account?.username || '-'}</div>
+                    <div className="text-xs text-slate-500 mt-2 flex items-start gap-1"><MapPin className="h-3 w-3 mt-0.5 shrink-0" />{[detail.account?.alamat, detail.account?.kelurahan, detail.account?.kecamatan, detail.account?.kota].filter(Boolean).join(', ') || '-'}</div>
+                  </div>
+                  <div className="flex sm:flex-col items-center justify-center gap-1 text-violet-700">
+                    <span className="text-xs font-semibold rounded-full bg-violet-100 px-3 py-1 whitespace-nowrap">{detail.relationship || 'Tidak tercatat'}</span>
+                    <ArrowRight className="h-5 w-5 rotate-90 sm:rotate-0" />
+                  </div>
+                  <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
+                    <div className="text-[11px] uppercase tracking-wide text-violet-600 font-semibold">Orang yang Diasesmen</div>
+                    <div className="font-semibold text-slate-800 mt-1">{detail.member?.fullName || detail.memberName}</div>
+                    <div className="text-xs text-slate-500">{detail.member?.age ?? detail.memberAge} th • {detail.member?.gender || detail.memberGender || '-'}{detail.member?.dob ? ` • lahir ${new Date(detail.member.dob).toLocaleDateString('id-ID')}` : ''}</div>
+                    <div className="text-xs text-violet-700 mt-2">{relText(detail.relationship)} <b>{detail.account?.name}</b></div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {detail.alert && (
+              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm flex items-center justify-between gap-2 flex-wrap">
+                <span className="flex items-center gap-2 text-red-700"><ShieldAlert className="h-4 w-4" /> Red Flag: <b>{detail.alert.type}</b> <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold ${SEV_CLS[detail.alert.severity] || 'bg-slate-100'}`}>{detail.alert.severity}</span></span>
+                <span className={`rounded-md px-2 py-0.5 text-xs font-medium ${STATUS_CLS[detail.alert.status] || ''}`}>Status: {detail.alert.status}</span>
+              </div>
+            )}
+
+            {r && (
+              <div>
+                <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><FileText className="h-4 w-4 text-teal-600" /> Rincian Skor</div>
+                {r.family === 'sdq' && (
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Aspek</TableHead><TableHead className="text-center">Skor</TableHead><TableHead className="text-center">Kategori</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(r.subDetail || []).map(x => (<TableRow key={x.key}><TableCell className="text-sm">{x.name}</TableCell><TableCell className="text-center font-medium">{x.score}</TableCell><TableCell className="text-center"><CatBadge cat={x.category} /></TableCell></TableRow>))}
+                      <TableRow className="bg-slate-50 font-semibold"><TableCell className="text-sm">Total Kesulitan (E+C+H+P)</TableCell><TableCell className="text-center">{r.totalDifficulties} / 40</TableCell><TableCell className="text-center"><CatBadge cat={r.totalCategory} /></TableCell></TableRow>
+                    </TableBody>
+                  </Table>
+                )}
+                {r.family === 'phq9' && (<div className="space-y-3"><ScoreRow label="Total Skor PHQ-9" value={`${r.total} / 27`} badge={r.severity} /><ScoreRow label="Item 9 (Pikiran melukai diri)" value={r.item9} badge={r.item9 > 0 ? 'Perlu Perhatian' : 'Aman'} /></div>)}
+                {r.family === 'ghq12' && (<div className="space-y-3"><ScoreRow label="Total Skor GHQ-12" value={`${r.total} / 36`} badge={r.overallCategory} /><ScoreRow label="Distres Psikologis" value={`${r.distress} / 18`} /><ScoreRow label="Disfungsi Sosial" value={`${r.dysfunction} / 18`} /></div>)}
+                {(r.recommendations || []).length > 0 && (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3"><div className="font-semibold text-sm mb-1">Rekomendasi Otomatis</div><ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">{r.recommendations.map((x, i) => <li key={i}>{x}</li>)}</ul></div>
+                )}
+              </div>
+            )}
+
+            <div data-testid="family-section">
+              <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><Heart className="h-4 w-4 text-teal-600" /> Anggota Keluarga dalam Akun {detail.account?.name ? `"${detail.account.name}"` : ''}</div>
+              <div className="rounded-lg border overflow-hidden">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Nama</TableHead><TableHead>Hubungan</TableHead><TableHead className="text-center">Asesmen</TableHead><TableHead>Hasil Terakhir</TableHead><TableHead></TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {(detail.family || []).map(m => (
+                      <TableRow key={m.id} className={m.isCurrent ? 'bg-teal-50/60' : ''}>
+                        <TableCell className="text-sm"><span className="font-medium">{m.fullName}</span>{m.isCurrent && <span className="ml-1 text-[10px] text-teal-700 font-semibold">(sedang dilihat)</span>}<div className="text-xs text-slate-400">{m.age} th • {m.gender}</div></TableCell>
+                        <TableCell><RelBadge rel={m.relationship} /></TableCell>
+                        <TableCell className="text-center text-sm">{m.assessmentCount}</TableCell>
+                        <TableCell>{m.latest ? <div className="flex items-center gap-2 flex-wrap"><CatBadge cat={m.latest.overallCategory} /><span className="text-[11px] text-slate-400">{fmtDate(m.latest.createdAt)}</span></div> : <span className="text-xs text-slate-400">Belum asesmen</span>}</TableCell>
+                        <TableCell className="text-right">{m.latest && m.latest.id !== detail.id && <Button size="sm" variant="ghost" onClick={() => onOpen(m.latest.id)}>Lihat</Button>}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {(detail.memberHistory || []).length > 1 && (
+              <div>
+                <div className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2"><TrendingUp className="h-4 w-4 text-teal-600" /> Riwayat Asesmen {detail.memberName}</div>
+                <div className="space-y-1.5">
+                  {detail.memberHistory.map(h => (
+                    <div key={h.id} className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm ${h.id === detail.id ? 'border-teal-300 bg-teal-50/60' : ''}`}>
+                      <div><span className="font-medium">{h.instrumentName}</span><span className="text-xs text-slate-400 ml-2">{fmtDate(h.createdAt)}</span></div>
+                      <div className="flex items-center gap-2"><span className="text-xs text-slate-500">{h.score ?? '-'} / {h.scoreMax ?? '-'}</span><CatBadge cat={h.overallCategory} />{h.id !== detail.id && <Button size="sm" variant="ghost" onClick={() => onOpen(h.id)}>Lihat</Button>}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {(detail.answerDetail || []).length > 0 && (
+              <div>
+                <Button variant="outline" size="sm" onClick={() => setShowAnswers(v => !v)} data-testid="toggle-answers"><ListChecks className="h-4 w-4 mr-1" /> {showAnswers ? 'Sembunyikan' : 'Tampilkan'} Jawaban Kuesioner ({detail.answerDetail.length} butir)</Button>
+                {showAnswers && (
+                  <ol className="mt-3 space-y-1.5">
+                    {detail.answerDetail.map((x, i) => (
+                      <li key={x.id} className="flex items-start justify-between gap-3 rounded-md border px-3 py-2 text-sm">
+                        <span className="text-slate-600"><span className="text-slate-400 mr-1">{i + 1}.</span>{x.text}</span>
+                        <span className="shrink-0 rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">{x.label || '-'}{x.value != null ? ` (${x.value})` : ''}</span>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </div>
+            )}
+            <p className="text-xs text-slate-400">Hasil ini adalah skrining awal, bukan diagnosis klinis.</p>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
